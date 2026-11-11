@@ -1,0 +1,422 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Global Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'igordesouzaar@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (
+        isVerifiedUser() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function hasParentWorkspace(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+        get(/databases/$(database)/documents/users/$(userId)).data.ownerId == request.auth.uid;
+    }
+
+    function isValidCategory(cat) {
+      return cat is string &&
+        cat.size() >= 1 &&
+        cat.size() <= 30 &&
+        cat in ['Dicas da Mari', 'Palavras', 'Frases', 'Phrasal Verbs', 'Outros'];
+    }
+
+    function isValidSubtopic(sub) {
+      return sub is string &&
+        sub.size() >= 1 &&
+        sub.size() <= 20 &&
+        sub in ['Viagens', 'Clima', 'Trabalho', 'Lazer', 'Casual', 'Outros'];
+    }
+
+    function isValidBoundedStringList(arr, minItems, maxItems, maxItemLen) {
+      return arr is list &&
+        arr.size() >= minItems &&
+        arr.size() <= maxItems &&
+        (arr.size() == 0 || (arr[0] is string && arr[0].size() >= 1 && arr[0].size() <= maxItemLen));
+    }
+
+    function hasValidOptionalCardPhonetics(data) {
+      return (!('phoneticUs' in data) || (data.phoneticUs is string && data.phoneticUs.size() >= 0 && data.phoneticUs.size() <= 160)) &&
+        (!('phoneticUk' in data) || (data.phoneticUk is string && data.phoneticUk.size() >= 0 && data.phoneticUk.size() <= 160)) &&
+        (!('ukNote' in data) || (data.ukNote is string && data.ukNote.size() >= 0 && data.ukNote.size() <= 240));
+    }
+
+    // Validation Blueprints
+    function isValidAdminRecord(data, adminUid) {
+      return isValidId(adminUid) &&
+        data.keys().hasAll(['uid', 'grantedBy', 'label', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'grantedBy', 'label', 'createdAt']) &&
+        data.uid == adminUid &&
+        isValidId(data.uid) &&
+        data.grantedBy == request.auth.uid &&
+        isValidId(data.grantedBy) &&
+        data.label is string && data.label.size() >= 1 && data.label.size() <= 80 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidGlobalCard(data, cardId) {
+      return isValidId(cardId) &&
+        data.keys().hasAll([
+          'id', 'authorId', 'term', 'category', 'subtopic', 'literal',
+          'colloquial', 'exampleEn', 'examplePt', 'exampleEn2', 'examplePt2',
+          'tip', 'published', 'archived', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'authorId', 'term', 'category', 'subtopic', 'literal',
+          'phoneticUs', 'phoneticUk', 'ukNote',
+          'colloquial', 'exampleEn', 'examplePt', 'exampleEn2', 'examplePt2',
+          'tip', 'published', 'archived', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id == cardId &&
+        isValidId(data.id) &&
+        isValidId(data.authorId) &&
+        data.term is string && data.term.size() >= 1 && data.term.size() <= 140 &&
+        isValidCategory(data.category) &&
+        isValidSubtopic(data.subtopic) &&
+        data.literal is string && data.literal.size() >= 1 && data.literal.size() <= 240 &&
+        hasValidOptionalCardPhonetics(data) &&
+        isValidBoundedStringList(data.colloquial, 1, 8, 90) &&
+        data.exampleEn is string && data.exampleEn.size() >= 12 && data.exampleEn.size() <= 260 &&
+        data.examplePt is string && data.examplePt.size() >= 2 && data.examplePt.size() <= 260 &&
+        data.exampleEn2 is string && data.exampleEn2.size() >= 12 && data.exampleEn2.size() <= 260 &&
+        data.examplePt2 is string && data.examplePt2.size() >= 2 && data.examplePt2.size() <= 260 &&
+        data.tip is string && data.tip.size() >= 0 && data.tip.size() <= 400 &&
+        data.published is bool &&
+        data.archived is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserWorkspace(data, userId) {
+      return isValidId(userId) &&
+        data.keys().hasAll([
+          'ownerId', 'studyScope', 'selectedCardIds', 'connectedDeckIds',
+          'activeRound', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'ownerId', 'studyScope', 'selectedCardIds', 'connectedDeckIds',
+          'activeRound', 'preferredAccent', 'createdAt', 'updatedAt'
+        ]) &&
+        data.ownerId == userId &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.ownerId) &&
+        data.studyScope is string &&
+        data.studyScope.size() <= 16 &&
+        data.studyScope in ['selected', 'decks', 'all'] &&
+        isValidBoundedStringList(data.selectedCardIds, 0, 20, 128) &&
+        isValidBoundedStringList(data.connectedDeckIds, 0, 12, 128) &&
+        data.activeRound is int && data.activeRound >= 1 && data.activeRound <= 10000 &&
+        (!('preferredAccent' in data) || (
+          data.preferredAccent is string &&
+          data.preferredAccent.size() >= 2 &&
+          data.preferredAccent.size() <= 4 &&
+          data.preferredAccent in ['us', 'uk']
+        )) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCardProgress(data, cardId, userId) {
+      return isValidId(userId) &&
+        isValidId(cardId) &&
+        data.keys().hasAll([
+          'cardId', 'ownerId', 'masteryLevel', 'roundMarked', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'cardId', 'ownerId', 'masteryLevel', 'roundMarked', 'createdAt', 'updatedAt'
+        ]) &&
+        data.cardId == cardId &&
+        isValidId(data.cardId) &&
+        data.ownerId == userId &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.ownerId) &&
+        data.masteryLevel is string &&
+        data.masteryLevel.size() <= 16 &&
+        data.masteryLevel in ['unseen', 'review', 'mastered'] &&
+        data.roundMarked is int && data.roundMarked >= 1 && data.roundMarked <= 10000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCustomCard(data, cardId, userId) {
+      return isValidId(userId) &&
+        isValidId(cardId) &&
+        data.keys().hasAll([
+          'id', 'ownerId', 'term', 'category', 'subtopic', 'literal',
+          'colloquial', 'exampleEn', 'examplePt', 'exampleEn2', 'examplePt2',
+          'tip', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'ownerId', 'term', 'category', 'subtopic', 'literal',
+          'phoneticUs', 'phoneticUk', 'ukNote',
+          'colloquial', 'exampleEn', 'examplePt', 'exampleEn2', 'examplePt2',
+          'tip', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id == cardId &&
+        isValidId(data.id) &&
+        data.ownerId == userId &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.ownerId) &&
+        data.term is string && data.term.size() >= 1 && data.term.size() <= 140 &&
+        isValidCategory(data.category) &&
+        isValidSubtopic(data.subtopic) &&
+        data.literal is string && data.literal.size() >= 1 && data.literal.size() <= 240 &&
+        hasValidOptionalCardPhonetics(data) &&
+        isValidBoundedStringList(data.colloquial, 1, 8, 90) &&
+        data.exampleEn is string && data.exampleEn.size() >= 12 && data.exampleEn.size() <= 260 &&
+        data.examplePt is string && data.examplePt.size() >= 2 && data.examplePt.size() <= 260 &&
+        data.exampleEn2 is string && data.exampleEn2.size() >= 12 && data.exampleEn2.size() <= 260 &&
+        data.examplePt2 is string && data.examplePt2.size() >= 2 && data.examplePt2.size() <= 260 &&
+        data.tip is string && data.tip.size() >= 0 && data.tip.size() <= 400 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserDeck(data, deckId, userId) {
+      return isValidId(userId) &&
+        isValidId(deckId) &&
+        data.keys().hasAll([
+          'id', 'ownerId', 'name', 'description', 'colorTag',
+          'cardIds', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'ownerId', 'name', 'description', 'colorTag',
+          'cardIds', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id == deckId &&
+        isValidId(data.id) &&
+        data.ownerId == userId &&
+        data.ownerId == request.auth.uid &&
+        isValidId(data.ownerId) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+        data.description is string && data.description.size() >= 0 && data.description.size() <= 240 &&
+        data.colorTag is string &&
+        data.colorTag.size() <= 16 &&
+        data.colorTag in ['sage', 'ochre', 'slate', 'terracotta'] &&
+        isValidBoundedStringList(data.cardIds, 0, 200, 128) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // 1. Admin Registry (/admins/{adminUid})
+    match /admins/{adminUid} {
+      allow get: if isVerifiedUser() && isValidId(adminUid) && (request.auth.uid == adminUid || isAdmin());
+      allow list: if isVerifiedUser() && existing().grantedBy == request.auth.uid;
+      allow create: if isVerifiedUser() &&
+        isValidAdminRecord(incoming(), adminUid) &&
+        incoming().createdAt == request.time &&
+        isAdmin();
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(adminUid) && isBootstrappedAdmin();
+    }
+
+    // 2. Global Official Cards (/globalCards/{cardId})
+    match /globalCards/{cardId} {
+      allow get: if isValidId(cardId) && ((resource != null && existing().published == true) || isAdmin());
+      allow list: if existing().published == true;
+      allow create: if isVerifiedUser() &&
+        isValidGlobalCard(incoming(), cardId) &&
+        incoming().authorId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+      allow update: if (
+        isVerifiedUser() && isValidGlobalCard(incoming(), cardId) && (
+          incoming().id == existing().id &&
+          incoming().authorId == existing().authorId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'term', 'category', 'subtopic', 'literal',
+              'phoneticUs', 'phoneticUk', 'ukNote', 'colloquial',
+              'exampleEn', 'examplePt', 'exampleEn2', 'examplePt2', 'tip',
+              'published', 'archived', 'updatedAt'
+            ]) ||
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'published', 'archived', 'updatedAt'
+            ])
+          ) &&
+          isAdmin()
+        )
+      );
+      allow delete: if isVerifiedUser() && isValidId(cardId) && isAdmin();
+    }
+
+    // 3. Student Workspace Root (/users/{userId})
+    match /users/{userId} {
+      allow get: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if false;
+      allow create: if isVerifiedUser() &&
+        isValidUserWorkspace(incoming(), userId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if (
+        isVerifiedUser() && isValidUserWorkspace(incoming(), userId) && (
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          (
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'studyScope', 'selectedCardIds', 'connectedDeckIds',
+              'activeRound', 'preferredAccent', 'updatedAt'
+            ]) ||
+            isAdmin()
+          )
+        )
+      );
+
+      // 3a. Per-Card Progress Subcollection (/users/{userId}/cardProgress/{cardId})
+      match /cardProgress/{cardId} {
+        allow get: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(cardId) &&
+          request.auth.uid == userId &&
+          (resource == null || existing().ownerId == request.auth.uid) &&
+          hasParentWorkspace(userId);
+        allow list: if isVerifiedUser() &&
+          request.auth.uid == userId &&
+          existing().ownerId == request.auth.uid;
+        allow create: if isVerifiedUser() &&
+          isValidCardProgress(incoming(), cardId, userId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          hasParentWorkspace(userId);
+        allow update: if (
+          isVerifiedUser() && isValidCardProgress(incoming(), cardId, userId) && (
+            incoming().cardId == existing().cardId &&
+            incoming().ownerId == existing().ownerId &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time &&
+            (
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'masteryLevel', 'roundMarked', 'updatedAt'
+              ]) ||
+              isAdmin()
+            ) &&
+            hasParentWorkspace(userId)
+          )
+        );
+        allow delete: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(cardId) &&
+          request.auth.uid == userId &&
+          existing().ownerId == request.auth.uid &&
+          hasParentWorkspace(userId);
+      }
+
+      // 3b. Personal Custom Cards Subcollection (/users/{userId}/customCards/{cardId})
+      match /customCards/{cardId} {
+        allow get: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(cardId) &&
+          request.auth.uid == userId &&
+          (resource == null || existing().ownerId == request.auth.uid) &&
+          hasParentWorkspace(userId);
+        allow list: if isVerifiedUser() &&
+          request.auth.uid == userId &&
+          existing().ownerId == request.auth.uid;
+        allow create: if isVerifiedUser() &&
+          isValidCustomCard(incoming(), cardId, userId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          hasParentWorkspace(userId);
+        allow update: if (
+          isVerifiedUser() && isValidCustomCard(incoming(), cardId, userId) && (
+            incoming().id == existing().id &&
+            incoming().ownerId == existing().ownerId &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time &&
+            (
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'term', 'category', 'subtopic', 'literal',
+                'phoneticUs', 'phoneticUk', 'ukNote', 'colloquial',
+                'exampleEn', 'examplePt', 'exampleEn2', 'examplePt2', 'tip', 'updatedAt'
+              ]) ||
+              isAdmin()
+            ) &&
+            hasParentWorkspace(userId)
+          )
+        );
+        allow delete: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(cardId) &&
+          request.auth.uid == userId &&
+          existing().ownerId == request.auth.uid &&
+          hasParentWorkspace(userId);
+      }
+
+      // 3c. Connectable Decks Subcollection (/users/{userId}/decks/{deckId})
+      match /decks/{deckId} {
+        allow get: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(deckId) &&
+          request.auth.uid == userId &&
+          (resource == null || existing().ownerId == request.auth.uid) &&
+          hasParentWorkspace(userId);
+        allow list: if isVerifiedUser() &&
+          request.auth.uid == userId &&
+          existing().ownerId == request.auth.uid;
+        allow create: if isVerifiedUser() &&
+          isValidUserDeck(incoming(), deckId, userId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          hasParentWorkspace(userId);
+        allow update: if (
+          isVerifiedUser() && isValidUserDeck(incoming(), deckId, userId) && (
+            incoming().id == existing().id &&
+            incoming().ownerId == existing().ownerId &&
+            incoming().createdAt == existing().createdAt &&
+            incoming().updatedAt == request.time &&
+            (
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'name', 'description', 'colorTag', 'cardIds', 'updatedAt'
+              ]) ||
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'cardIds', 'updatedAt'
+              ]) ||
+              isAdmin()
+            ) &&
+            hasParentWorkspace(userId)
+          )
+        );
+        allow delete: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(deckId) &&
+          request.auth.uid == userId &&
+          existing().ownerId == request.auth.uid &&
+          hasParentWorkspace(userId);
+      }
+    }
+  }
+}

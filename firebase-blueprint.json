@@ -1,0 +1,480 @@
+{
+  "entities": {
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Trusted administrator registry entry granting global catalog management privileges.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the administrator.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "grantedBy": {
+          "type": "string",
+          "description": "UID of the administrator who created this record.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "label": {
+          "type": "string",
+          "description": "Short descriptive role note without PII.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation."
+        }
+      },
+      "required": ["uid", "grantedBy", "label", "createdAt"]
+    },
+    "GlobalCard": {
+      "title": "GlobalCard",
+      "description": "Official flashcard published or overridden by an administrator for all users.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the global card or overridden seed card.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorId": {
+          "type": "string",
+          "description": "UID of the administrator who created the card.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "term": {
+          "type": "string",
+          "description": "English word or colloquial expression.",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "category": {
+          "type": "string",
+          "description": "Primary topic folder.",
+          "enum": ["Dicas da Mari", "Palavras", "Frases", "Phrasal Verbs", "Outros"]
+        },
+        "subtopic": {
+          "type": "string",
+          "description": "Contextual subtopic.",
+          "enum": ["Viagens", "Clima", "Trabalho", "Lazer", "Casual", "Outros"]
+        },
+        "literal": {
+          "type": "string",
+          "description": "Literal meaning and simplified American English phonetic notation.",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "phoneticUs": {
+          "type": "string",
+          "description": "Simplified Brazilian-friendly General American phonetic transcription (EWM-US).",
+          "minLength": 0,
+          "maxLength": 160
+        },
+        "phoneticUk": {
+          "type": "string",
+          "description": "Simplified Brazilian-friendly British English phonetic transcription (EWM-UK).",
+          "minLength": 0,
+          "maxLength": 160
+        },
+        "ukNote": {
+          "type": "string",
+          "description": "Optional lexical, spelling, or idiomatic note contrasting US and UK usage.",
+          "minLength": 0,
+          "maxLength": 240
+        },
+        "colloquial": {
+          "type": "array",
+          "description": "Bounded list of up to 8 natural Brazilian Portuguese equivalents."
+        },
+        "exampleEn": {
+          "type": "string",
+          "description": "Primary real-world English example sentence.",
+          "minLength": 12,
+          "maxLength": 260
+        },
+        "examplePt": {
+          "type": "string",
+          "description": "Natural Portuguese translation of the primary example.",
+          "minLength": 2,
+          "maxLength": 260
+        },
+        "exampleEn2": {
+          "type": "string",
+          "description": "Secondary real-world English example sentence.",
+          "minLength": 12,
+          "maxLength": 260
+        },
+        "examplePt2": {
+          "type": "string",
+          "description": "Natural Portuguese translation of the secondary example.",
+          "minLength": 2,
+          "maxLength": 260
+        },
+        "tip": {
+          "type": "string",
+          "description": "Pedagogical usage and pronunciation tip.",
+          "minLength": 0,
+          "maxLength": 400
+        },
+        "published": {
+          "type": "boolean",
+          "description": "Whether this card is visible to all users."
+        },
+        "archived": {
+          "type": "boolean",
+          "description": "If true, hides an official or seed card from active global catalog."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when last updated."
+        }
+      },
+      "required": [
+        "id",
+        "authorId",
+        "term",
+        "category",
+        "subtopic",
+        "literal",
+        "colloquial",
+        "exampleEn",
+        "examplePt",
+        "exampleEn2",
+        "examplePt2",
+        "tip",
+        "published",
+        "archived",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserWorkspace": {
+      "title": "UserWorkspace",
+      "description": "Per-user root study workspace configuration without PII.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Immutable Firebase Auth UID of the student.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "studyScope": {
+          "type": "string",
+          "description": "Current active study source mode.",
+          "enum": ["selected", "decks", "all"]
+        },
+        "selectedCardIds": {
+          "type": "array",
+          "description": "Bounded list of up to 20 card IDs for Estudo Objetivo."
+        },
+        "connectedDeckIds": {
+          "type": "array",
+          "description": "Bounded list of up to 12 deck IDs currently connected for mixed study."
+        },
+        "activeRound": {
+          "type": "integer",
+          "description": "Current study round counter."
+        },
+        "preferredAccent": {
+          "type": "string",
+          "description": "Preferred default English voice and phonetic accent ('us' or 'uk').",
+          "enum": ["us", "uk"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of workspace creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last workspace auto-save."
+        }
+      },
+      "required": [
+        "ownerId",
+        "studyScope",
+        "selectedCardIds",
+        "connectedDeckIds",
+        "activeRound",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CardProgress": {
+      "title": "CardProgress",
+      "description": "Individual student mastery record for a specific flashcard.",
+      "type": "object",
+      "properties": {
+        "cardId": {
+          "type": "string",
+          "description": "Target flashcard ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Immutable UID of the student.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "masteryLevel": {
+          "type": "string",
+          "description": "Current study mastery state.",
+          "enum": ["unseen", "review", "mastered"]
+        },
+        "roundMarked": {
+          "type": "integer",
+          "description": "Round number in which this card was last marked."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when first recorded."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when last updated."
+        }
+      },
+      "required": [
+        "cardId",
+        "ownerId",
+        "masteryLevel",
+        "roundMarked",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CustomCard": {
+      "title": "CustomCard",
+      "description": "Personal flashcard created by a student.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the custom card.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Immutable UID of the student who owns the card.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "term": {
+          "type": "string",
+          "description": "English word or colloquial expression.",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "category": {
+          "type": "string",
+          "description": "Primary topic folder.",
+          "enum": ["Dicas da Mari", "Palavras", "Frases", "Phrasal Verbs", "Outros"]
+        },
+        "subtopic": {
+          "type": "string",
+          "description": "Contextual subtopic.",
+          "enum": ["Viagens", "Clima", "Trabalho", "Lazer", "Casual", "Outros"]
+        },
+        "literal": {
+          "type": "string",
+          "description": "Literal meaning and phonetic notation.",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "phoneticUs": {
+          "type": "string",
+          "description": "Simplified Brazilian-friendly General American phonetic transcription (EWM-US).",
+          "minLength": 0,
+          "maxLength": 160
+        },
+        "phoneticUk": {
+          "type": "string",
+          "description": "Simplified Brazilian-friendly British English phonetic transcription (EWM-UK).",
+          "minLength": 0,
+          "maxLength": 160
+        },
+        "ukNote": {
+          "type": "string",
+          "description": "Optional lexical, spelling, or idiomatic note contrasting US and UK usage.",
+          "minLength": 0,
+          "maxLength": 240
+        },
+        "colloquial": {
+          "type": "array",
+          "description": "Bounded list of up to 8 natural Brazilian Portuguese equivalents."
+        },
+        "exampleEn": {
+          "type": "string",
+          "description": "Primary English example sentence.",
+          "minLength": 12,
+          "maxLength": 260
+        },
+        "examplePt": {
+          "type": "string",
+          "description": "Natural Portuguese translation of example 1.",
+          "minLength": 2,
+          "maxLength": 260
+        },
+        "exampleEn2": {
+          "type": "string",
+          "description": "Secondary English example sentence.",
+          "minLength": 12,
+          "maxLength": 260
+        },
+        "examplePt2": {
+          "type": "string",
+          "description": "Natural Portuguese translation of example 2.",
+          "minLength": 2,
+          "maxLength": 260
+        },
+        "tip": {
+          "type": "string",
+          "description": "Usage and pronunciation tip.",
+          "minLength": 0,
+          "maxLength": 400
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when last updated."
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "term",
+        "category",
+        "subtopic",
+        "literal",
+        "colloquial",
+        "exampleEn",
+        "examplePt",
+        "exampleEn2",
+        "examplePt2",
+        "tip",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserDeck": {
+      "title": "UserDeck",
+      "description": "Student deck that mixes personal custom cards and official catalog cards and can be connected with other decks.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the deck.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Immutable UID of the student who owns the deck.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the deck.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional short description of the deck purpose.",
+          "minLength": 0,
+          "maxLength": 240
+        },
+        "colorTag": {
+          "type": "string",
+          "description": "Calm editorial accent tag for visual organization.",
+          "enum": ["sage", "ochre", "slate", "terracotta"]
+        },
+        "cardIds": {
+          "type": "array",
+          "description": "Bounded list of up to 200 card IDs combining personal cards and official catalog cards."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when last updated."
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "name",
+        "description",
+        "colorTag",
+        "cardIds",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Trusted admin UID registry."
+    },
+    "/globalCards/{cardId}": {
+      "schema": { "$ref": "#/entities/GlobalCard" },
+      "description": "Global flashcards broadcast or updated by administrators for all learners."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserWorkspace" },
+      "description": "Root per-user study workspace configuration."
+    },
+    "/users/{userId}/cardProgress/{cardId}": {
+      "schema": { "$ref": "#/entities/CardProgress" },
+      "description": "Per-card mastery tracking subcollection owned by the student."
+    },
+    "/users/{userId}/customCards/{cardId}": {
+      "schema": { "$ref": "#/entities/CustomCard" },
+      "description": "Personal flashcards created by the student."
+    },
+    "/users/{userId}/decks/{deckId}": {
+      "schema": { "$ref": "#/entities/UserDeck" },
+      "description": "Custom and mixed flashcard decks owned by the student."
+    }
+  }
+}

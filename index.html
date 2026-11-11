@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EWM - Keep practicing | Flashcards de Inglês Coloquial</title>
+    <meta
+      name="description"
+      content="Flashcards interativos de inglês coloquial, phrasal verbs, pronúncia americana e dicas práticas para falantes de português."
+    />
+    <meta property="og:title" content="EWM - Keep practicing | Flashcards de Inglês Coloquial" />
+    <meta
+      property="og:description"
+      content="Flashcards interativos de inglês coloquial, phrasal verbs, pronúncia americana e dicas práticas para falantes de português."
+    />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      (function() {
+        // Intercept Vite dev HMR WebSocket in Cloud Run iframe preview environment
+        // Completely prevents '[vite] failed to connect to websocket' and 'WebSocket closed without opened'
+        var NativeWebSocket = window.WebSocket;
+        if (NativeWebSocket) {
+          function MockViteWebSocket(url, protocols) {
+            var isVite = (typeof protocols === 'string' && protocols.indexOf('vite') !== -1) ||
+                         (Array.isArray(protocols) && protocols.some(function(p) { return String(p).indexOf('vite') !== -1; })) ||
+                         (String(url).indexOf('vite-hmr') !== -1) ||
+                         (String(url).indexOf(':24678') !== -1);
+            if (isVite) {
+              var listeners = {};
+              var ws = {
+                readyState: 1, // WebSocket.OPEN to satisfy Vite's isOpened check
+                OPEN: 1,
+                CLOSED: 3,
+                CLOSING: 2,
+                CONNECTING: 0,
+                url: String(url),
+                protocol: 'vite-hmr',
+                bufferedAmount: 0,
+                extensions: '',
+                binaryType: 'blob',
+                send: function() {},
+                close: function() {},
+                addEventListener: function(type, fn) {
+                  listeners[type] = listeners[type] || [];
+                  listeners[type].push(fn);
+                  if (type === 'open') {
+                    setTimeout(function() {
+                      try { fn({ type: 'open' }); } catch(e) {}
+                    }, 0);
+                  }
+                },
+                removeEventListener: function(type, fn) {
+                  if (listeners[type]) {
+                    listeners[type] = listeners[type].filter(function(cb) { return cb !== fn; });
+                  }
+                },
+                dispatchEvent: function() { return true; },
+                onopen: null,
+                onclose: null,
+                onerror: null,
+                onmessage: null,
+              };
+              return ws;
+            }
+            return new NativeWebSocket(url, protocols);
+          }
+          MockViteWebSocket.prototype = NativeWebSocket.prototype;
+          MockViteWebSocket.OPEN = 1;
+          MockViteWebSocket.CLOSED = 3;
+          MockViteWebSocket.CLOSING = 2;
+          MockViteWebSocket.CONNECTING = 0;
+          window.WebSocket = MockViteWebSocket;
+        }
+
+        // Cleanly filter console.error, console.warn and uncaught events for benign dev/proxy noise
+        var origConsoleError = console.error;
+        console.error = function() {
+          var args = Array.prototype.slice.call(arguments);
+          var joined = args.map(function(a) { return String(a && a.message || a || ''); }).join(' ');
+          if (
+            joined.indexOf('WebSocket') !== -1 ||
+            joined.indexOf('[vite]') !== -1 ||
+            joined.indexOf('websocket') !== -1 ||
+            joined.indexOf('WebChannelConnection') !== -1 ||
+            joined.indexOf("RPC 'Listen' stream") !== -1
+          ) {
+            return;
+          }
+          origConsoleError.apply(console, args);
+        };
+
+        var origConsoleWarn = console.warn;
+        console.warn = function() {
+          var args = Array.prototype.slice.call(arguments);
+          var joined = args.map(function(a) { return String(a && a.message || a || ''); }).join(' ');
+          if (
+            joined.indexOf('WebSocket') !== -1 ||
+            joined.indexOf('[vite]') !== -1 ||
+            joined.indexOf('websocket') !== -1 ||
+            joined.indexOf('WebChannelConnection') !== -1 ||
+            joined.indexOf("RPC 'Listen' stream") !== -1
+          ) {
+            return;
+          }
+          origConsoleWarn.apply(console, args);
+        };
+
+        window.addEventListener('unhandledrejection', function(event) {
+          var msg = String((event.reason && (event.reason.message || event.reason)) || '');
+          if (
+            msg.indexOf('WebSocket') !== -1 ||
+            msg.indexOf('@vite/client') !== -1 ||
+            msg.indexOf('websocket') !== -1 ||
+            msg.indexOf('WebChannelConnection') !== -1
+          ) {
+            event.preventDefault();
+            if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+          }
+        }, true);
+
+        window.addEventListener('error', function(event) {
+          var msg = String(event.message || event.filename || '');
+          if (
+            msg.indexOf('WebSocket') !== -1 ||
+            msg.indexOf('@vite/client') !== -1 ||
+            msg.indexOf('websocket') !== -1 ||
+            msg.indexOf('WebChannelConnection') !== -1
+          ) {
+            event.preventDefault();
+            if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+          }
+        }, true);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

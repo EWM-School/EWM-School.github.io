@@ -1,0 +1,8 @@
+{
+  "name": "EWM - Keep practicing",
+  "description": "Flashcards interativos de inglês coloquial, phrasal verbs, pronúncia americana e dicas práticas para falantes de português.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
