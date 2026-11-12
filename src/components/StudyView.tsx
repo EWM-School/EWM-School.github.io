@@ -11,6 +11,7 @@ import {
   ListChecks,
   Minimize2,
   RotateCw,
+  Share2,
   Shuffle,
   Trash2,
   Volume2,
@@ -60,6 +61,7 @@ interface StudyViewProps {
   onGoToDecks: () => void;
   onEditCard: (card: Flashcard) => void;
   onDeleteCard: (card: Flashcard) => void;
+  onShareCard?: (card: Flashcard) => void;
   onToggleFocusMode: () => void;
   onResetFilters: () => void;
 }
@@ -86,6 +88,7 @@ export const StudyView = memo(function StudyView({
   onGoToDecks,
   onEditCard,
   onDeleteCard,
+  onShareCard,
   onToggleFocusMode,
   onResetFilters,
 }: StudyViewProps) {
@@ -163,30 +166,30 @@ export const StudyView = memo(function StudyView({
   };
 
   return (
-    <div className="space-y-4">
-      {/* Study Mode Context Strip */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex flex-wrap p-1 rounded-xl bg-[#EAE6DD] dark:bg-[#1D201D] border border-[#E0DBD1] dark:border-[#2E332E]">
+    <div className="space-y-2.5 sm:space-y-4">
+      {/* Study Mode Context Strip — Streamlined on Mobile */}
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
+          <div className="inline-flex flex-wrap p-0.5 sm:p-1 rounded-xl bg-[#EAE6DD] dark:bg-[#1D201D] border border-[#DFDBD0] dark:border-[#2E332E]">
             <button
               type="button"
               onClick={() => onChangeScope('selected')}
-              className={`min-h-[42px] lg:min-h-[30px] px-3 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              className={`min-h-[34px] lg:min-h-[30px] px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 studyScope === 'selected'
-                  ? 'bg-white dark:bg-[#2C312C] text-[#1C1B18] dark:text-[#EBE7DE] shadow-xs'
+                  ? 'bg-white dark:bg-[#2C312C] text-[#1C1B18] dark:text-[#EBE7DE] shadow-2xs'
                   : 'text-[#5C574E] dark:text-[#AFAAA0]'
               }`}
             >
-              Estudo Objetivo{' '}
+              Objetivo{' '}
               <span className="font-mono-num opacity-80">({selectedCount})</span>
             </button>
 
             <button
               type="button"
               onClick={() => onChangeScope('decks')}
-              className={`min-h-[42px] lg:min-h-[30px] px-3 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              className={`min-h-[34px] lg:min-h-[30px] px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 studyScope === 'decks'
-                  ? 'bg-white dark:bg-[#2C312C] text-[#1C1B18] dark:text-[#EBE7DE] shadow-xs'
+                  ? 'bg-white dark:bg-[#2C312C] text-[#1C1B18] dark:text-[#EBE7DE] shadow-2xs'
                   : 'text-[#5C574E] dark:text-[#AFAAA0]'
               }`}
             >
@@ -197,13 +200,13 @@ export const StudyView = memo(function StudyView({
             <button
               type="button"
               onClick={() => onChangeScope('all')}
-              className={`min-h-[42px] lg:min-h-[30px] px-3 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              className={`min-h-[34px] lg:min-h-[30px] px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 studyScope === 'all'
-                  ? 'bg-white dark:bg-[#2C312C] text-[#1C1B18] dark:text-[#EBE7DE] shadow-xs'
+                  ? 'bg-white dark:bg-[#2C312C] text-[#1C1B18] dark:text-[#EBE7DE] shadow-2xs'
                   : 'text-[#5C574E] dark:text-[#AFAAA0]'
               }`}
             >
-              Todo o Acervo{' '}
+              Acervo{' '}
               <span className="font-mono-num opacity-80">({totalDeckCount})</span>
             </button>
           </div>
@@ -213,7 +216,7 @@ export const StudyView = memo(function StudyView({
               <button
                 type="button"
                 onClick={() => onQuickRandomSelection(10)}
-                className="min-h-[44px] lg:min-h-[32px] inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] hover:bg-[#EAE6DD] dark:hover:bg-[#242824] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="min-h-[34px] lg:min-h-[32px] inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-medium text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] hover:bg-[#EAE6DD] dark:hover:bg-[#242824] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                 title="Sortear 10 novos cards para estudo"
               >
                 <Shuffle className="w-3.5 h-3.5" />
@@ -222,7 +225,7 @@ export const StudyView = memo(function StudyView({
               <button
                 type="button"
                 onClick={onGoToList}
-                className="hidden sm:inline-flex min-h-[44px] lg:min-h-[32px] items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#28665E] dark:text-[#68B4A8] hover:bg-[#EAF3F1] dark:hover:bg-[#1E312E] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="hidden sm:inline-flex min-h-[34px] lg:min-h-[32px] items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-[#28665E] dark:text-[#68B4A8] hover:bg-[#EAF3F1] dark:hover:bg-[#1E312E] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <ListChecks className="w-3.5 h-3.5" />
                 <span>Personalizar seleção</span>
@@ -234,17 +237,17 @@ export const StudyView = memo(function StudyView({
             <button
               type="button"
               onClick={onGoToDecks}
-              className="min-h-[44px] lg:min-h-[32px] inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#28665E] dark:text-[#68B4A8] hover:bg-[#EAF3F1] dark:hover:bg-[#1E312E] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              className="min-h-[34px] lg:min-h-[32px] inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-medium text-[#28665E] dark:text-[#68B4A8] hover:bg-[#EAF3F1] dark:hover:bg-[#1E312E] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
               <Link2 className="w-3.5 h-3.5" />
-              <span>Configurar baralhos conectados</span>
+              <span>Configurar baralhos</span>
             </button>
           )}
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 ml-auto">
           {cards.length > 0 && (
-            <span className="font-mono-num text-xs font-medium text-[#5C574E] dark:text-[#AFAAA0] whitespace-nowrap">
+            <span className="font-mono-num text-[11px] sm:text-xs font-semibold px-2 py-0.5 rounded-lg bg-[#EAE6DD]/70 dark:bg-[#252A25] text-[#5C574E] dark:text-[#C5C0B4] whitespace-nowrap">
               {safeIndex + 1} / {cards.length}
             </span>
           )}
@@ -252,7 +255,7 @@ export const StudyView = memo(function StudyView({
             <button
               type="button"
               onClick={onToggleFocusMode}
-              className="min-h-[48px] lg:min-h-[36px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] text-xs font-semibold text-[#1C1B18] dark:text-[#EBE7DE] shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
+              className="min-h-[36px] inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] text-xs font-semibold text-[#1C1B18] dark:text-[#EBE7DE] shadow-2xs whitespace-nowrap shrink-0 cursor-pointer"
             >
               <Minimize2 className="w-3.5 h-3.5" />
               <span>Sair do Foco</span>
@@ -282,7 +285,7 @@ export const StudyView = memo(function StudyView({
 
       {/* Empty State when filters or connected decks yield 0 cards */}
       {!currentCard ? (
-        <div className="rounded-3xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] p-8 sm:p-12 text-center space-y-4">
+        <div className="rounded-3xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] p-7 sm:p-12 text-center space-y-4">
           <div className="w-12 h-12 rounded-2xl bg-[#F0EDE6] dark:bg-[#292D29] mx-auto flex items-center justify-center text-[#28665E] dark:text-[#68B4A8]">
             {studyScope === 'decks' ? (
               <FolderKanban className="w-6 h-6" />
@@ -307,7 +310,7 @@ export const StudyView = memo(function StudyView({
               <button
                 type="button"
                 onClick={onGoToDecks}
-                className="min-h-[48px] px-5 py-2.5 rounded-xl bg-[#28665E] hover:bg-[#1F524B] text-white dark:bg-[#2A6D63] dark:hover:bg-[#327D72] dark:text-[#F4F7F6] text-xs font-semibold cursor-pointer"
+                className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#28665E] hover:bg-[#1F524B] text-white dark:bg-[#2A6D63] dark:hover:bg-[#327D72] dark:text-[#F4F7F6] text-xs font-semibold cursor-pointer"
               >
                 Ir para Meus Baralhos
               </button>
@@ -316,14 +319,14 @@ export const StudyView = memo(function StudyView({
                 <button
                   type="button"
                   onClick={onResetFilters}
-                  className="min-h-[48px] px-5 py-2.5 rounded-xl bg-[#28665E] hover:bg-[#1F524B] text-white dark:bg-[#2A6D63] dark:hover:bg-[#327D72] dark:text-[#F4F7F6] text-xs font-semibold cursor-pointer"
+                  className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#28665E] hover:bg-[#1F524B] text-white dark:bg-[#2A6D63] dark:hover:bg-[#327D72] dark:text-[#F4F7F6] text-xs font-semibold cursor-pointer"
                 >
                   Limpar filtros
                 </button>
                 <button
                   type="button"
                   onClick={() => onQuickRandomSelection(10)}
-                  className="min-h-[48px] px-5 py-2.5 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-xs font-semibold text-[#1C1B18] dark:text-[#EBE7DE] cursor-pointer"
+                  className="min-h-[44px] px-5 py-2.5 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-xs font-semibold text-[#1C1B18] dark:text-[#EBE7DE] cursor-pointer"
                 >
                   Sortear 10 cards
                 </button>
@@ -332,8 +335,8 @@ export const StudyView = memo(function StudyView({
           </div>
         </div>
       ) : (
-        <div className="max-w-3xl mx-auto space-y-4 sm:space-y-5">
-          {/* 3D Animated Flashcard Stage with Fluid Horizontal Swipe Gestures */}
+        <div className="max-w-3xl mx-auto space-y-2.5 sm:space-y-4">
+          {/* 3D Animated Flashcard Stage — 20% Proportional Mobile Reduction for Single-Screen Ergonomics */}
           <div key={currentCard.id} className="flashcard-perspective animate-card-enter">
             <article
               onClick={handleCardClick}
@@ -346,13 +349,13 @@ export const StudyView = memo(function StudyView({
             >
               {/* FRONT FACE */}
               <div
-                className={`flashcard-face rounded-3xl border border-[#E4E0D8] dark:border-[#2F352F] bg-white dark:bg-[#212421] shadow-[0_10px_30px_-14px_rgba(28,27,24,0.12)] dark:shadow-[0_14px_34px_-14px_rgba(0,0,0,0.45)] p-5 sm:p-8 min-h-[360px] sm:min-h-[430px] flex flex-col justify-between ${
+                className={`flashcard-face rounded-2xl sm:rounded-3xl border border-[#DFDAD0] dark:border-[#313831] ring-1 ring-black/[0.02] dark:ring-white/[0.04] bg-white dark:bg-[#202420] shadow-[0_8px_26px_-12px_rgba(28,27,24,0.14)] dark:shadow-[0_14px_32px_-12px_rgba(0,0,0,0.5)] p-4 sm:p-8 min-h-[288px] sm:min-h-[415px] flex flex-col justify-between ${
                   isFlipped ? 'pointer-events-none' : ''
                 }`}
               >
-                {/* Top Metadata + Actions */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-[#6B655C] dark:text-[#AFAAA0]">
+                {/* Top Metadata + Share/Edit/Delete Actions */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-x-1.5 sm:gap-x-2 gap-y-0.5 text-[11px] sm:text-xs font-medium text-[#6B655C] dark:text-[#AFAAA0]">
                     <span className="text-[#28665E] dark:text-[#68B4A8] font-semibold">
                       {currentCard.category}
                     </span>
@@ -385,35 +388,46 @@ export const StudyView = memo(function StudyView({
                   </div>
 
                   <div
-                    className="flex items-center gap-1"
+                    className="flex items-center gap-0.5 shrink-0 -mt-1 -mr-1"
                     onClick={(e) => e.stopPropagation()}
                   >
+                    {onShareCard && (
+                      <button
+                        type="button"
+                        onClick={() => onShareCard(currentCard)}
+                        aria-label="Compartilhar card no WhatsApp ou Stories"
+                        title="Compartilhar card nos Stories / WhatsApp"
+                        className="min-w-[38px] min-h-[38px] lg:min-w-[36px] lg:min-h-[36px] inline-flex items-center justify-center rounded-xl text-[#28665E] dark:text-[#68B4A8] hover:bg-[#EAF3F1] dark:hover:bg-[#1E312E] transition-colors cursor-pointer"
+                      >
+                        <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => onEditCard(currentCard)}
                       aria-label="Editar card"
                       title="Editar card"
-                      className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] inline-flex items-center justify-center rounded-xl text-[#787267] dark:text-[#AFAAA0] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] hover:bg-[#F0EDE6] dark:hover:bg-[#292D29] transition-colors cursor-pointer"
+                      className="min-w-[38px] min-h-[38px] lg:min-w-[36px] lg:min-h-[36px] inline-flex items-center justify-center rounded-xl text-[#787267] dark:text-[#AFAAA0] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] hover:bg-[#F0EDE6] dark:hover:bg-[#292D29] transition-colors cursor-pointer"
                     >
-                      <Edit3 className="w-4 h-4" />
+                      <Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => onDeleteCard(currentCard)}
                       aria-label="Excluir card"
                       title="Excluir card"
-                      className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] inline-flex items-center justify-center rounded-xl text-[#787267] dark:text-[#AFAAA0] hover:text-[#B5443C] dark:hover:text-[#E58982] hover:bg-[#FDF2F2] dark:hover:bg-[#322120] transition-colors cursor-pointer"
+                      className="min-w-[38px] min-h-[38px] lg:min-w-[36px] lg:min-h-[36px] inline-flex items-center justify-center rounded-xl text-[#787267] dark:text-[#AFAAA0] hover:text-[#B5443C] dark:hover:text-[#E58982] hover:bg-[#FDF2F2] dark:hover:bg-[#322120] transition-colors cursor-pointer"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     </button>
                   </div>
                 </div>
 
                 {/* Center Hero Term + Dual US/UK Phonetics + Dual Hybrid Speech Audio Controls */}
-                <div className="my-5 text-center space-y-3.5">
+                <div className="my-2.5 sm:my-5 text-center space-y-2 sm:space-y-3.5">
                   <h2
                     style={{ textWrap: 'balance' }}
-                    className="font-display text-3xl sm:text-4xl font-bold tracking-tight text-[#1C1B18] dark:text-[#EBE7DE] leading-tight"
+                    className="font-display text-[1.6rem] sm:text-4xl font-bold tracking-tight text-[#1C1B18] dark:text-[#EBE7DE] leading-[1.14]"
                   >
                     {currentCard.term}
                   </h2>
@@ -429,12 +443,12 @@ export const StudyView = memo(function StudyView({
 
                 {/* Two Real-Life English Sentences with US & UK Audio Choice Each */}
                 <div
-                  className="space-y-2.5 pt-4 border-t border-[#ECE9E1] dark:border-[#2A2F2A]"
+                  className="space-y-1.5 sm:space-y-2.5 pt-2.5 sm:pt-4 border-t border-[#ECE9E1] dark:border-[#2B312B]"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div className="flex items-start justify-between gap-3 rounded-2xl bg-[#FAF9F6] dark:bg-[#292D29] px-4 py-3">
-                    <div className="text-sm text-[#1C1B18] dark:text-[#E5E1D8] leading-relaxed">
-                      <span className="font-mono-num text-[11px] font-semibold text-[#28665E] dark:text-[#68B4A8] mr-2">
+                  <div className="flex items-start justify-between gap-2 sm:gap-3 rounded-xl sm:rounded-2xl bg-[#FAF9F6] dark:bg-[#282D28] border border-[#EFECE4] dark:border-[#323832] px-3 py-2 sm:px-4 sm:py-3">
+                    <div className="text-[12.5px] sm:text-sm text-[#1C1B18] dark:text-[#E8E4DB] leading-snug sm:leading-relaxed">
+                      <span className="font-mono-num text-[10px] sm:text-[11px] font-semibold text-[#28665E] dark:text-[#68B4A8] mr-1.5 sm:mr-2">
                         01
                       </span>
                       <span>&ldquo;{currentCard.exampleEn}&rdquo;</span>
@@ -447,9 +461,9 @@ export const StudyView = memo(function StudyView({
                     />
                   </div>
 
-                  <div className="flex items-start justify-between gap-3 rounded-2xl bg-[#FAF9F6] dark:bg-[#292D29] px-4 py-3">
-                    <div className="text-sm text-[#1C1B18] dark:text-[#E5E1D8] leading-relaxed">
-                      <span className="font-mono-num text-[11px] font-semibold text-[#6B655C] dark:text-[#AFAAA0] mr-2">
+                  <div className="flex items-start justify-between gap-2 sm:gap-3 rounded-xl sm:rounded-2xl bg-[#FAF9F6] dark:bg-[#282D28] border border-[#EFECE4] dark:border-[#323832] px-3 py-2 sm:px-4 sm:py-3">
+                    <div className="text-[12.5px] sm:text-sm text-[#1C1B18] dark:text-[#E8E4DB] leading-snug sm:leading-relaxed">
+                      <span className="font-mono-num text-[10px] sm:text-[11px] font-semibold text-[#6B655C] dark:text-[#AFAAA0] mr-1.5 sm:mr-2">
                         02
                       </span>
                       <span>&ldquo;{secondExample.en}&rdquo;</span>
@@ -469,11 +483,11 @@ export const StudyView = memo(function StudyView({
                     e.stopPropagation();
                     onToggleFlip();
                   }}
-                  className="mt-4 mx-auto min-h-[36px] text-center text-[11px] text-[#857F74] dark:text-[#8A857C] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  className="mt-2 sm:mt-4 mx-auto min-h-[28px] sm:min-h-[36px] text-center text-[10.5px] sm:text-[11px] text-[#7D776C] dark:text-[#989388] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <RotateCw className="w-3 h-3" />
                   <span className="sm:hidden">
-                    Toque para virar ou deslize para os lados
+                    Toque para virar · Deslize para trocar
                   </span>
                   <span className="hidden sm:inline">
                     Clique no card ou pressione Espaço para ver a tradução real
@@ -483,13 +497,13 @@ export const StudyView = memo(function StudyView({
 
               {/* BACK FACE */}
               <div
-                className={`flashcard-face flashcard-face-back absolute inset-0 rounded-3xl border border-[#D4DFDC] dark:border-[#314440] bg-[#FCFBF8] dark:bg-[#232723] shadow-[0_10px_30px_-14px_rgba(28,27,24,0.12)] dark:shadow-[0_14px_34px_-14px_rgba(0,0,0,0.45)] p-5 sm:p-8 flex flex-col justify-between overflow-y-auto ${
+                className={`flashcard-face flashcard-face-back absolute inset-0 rounded-2xl sm:rounded-3xl border border-[#C9DBD7] dark:border-[#334A45] ring-1 ring-black/[0.02] dark:ring-white/[0.04] bg-[#FCFBF8] dark:bg-[#222723] shadow-[0_8px_26px_-12px_rgba(28,27,24,0.14)] dark:shadow-[0_14px_32px_-12px_rgba(0,0,0,0.5)] p-4 sm:p-8 flex flex-col justify-between overflow-y-auto ${
                   !isFlipped ? 'pointer-events-none' : ''
                 }`}
               >
-                <div className="space-y-3.5">
+                <div className="space-y-2.5 sm:space-y-3.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-xs font-semibold text-[#28665E] dark:text-[#68B4A8]">
+                    <span className="text-[11px] sm:text-xs font-semibold text-[#28665E] dark:text-[#68B4A8]">
                       Como falamos no dia a dia
                     </span>
                     <BackFaceTermAudioControls
@@ -500,13 +514,13 @@ export const StudyView = memo(function StudyView({
                   </div>
 
                   {/* Primary Colloquial Translation */}
-                  <div className="space-y-1.5">
-                    <h3 className="font-display text-2xl sm:text-3xl font-bold text-[#1C1B18] dark:text-[#EBE7DE] leading-snug">
+                  <div className="space-y-1">
+                    <h3 className="font-display text-xl sm:text-3xl font-bold text-[#1C1B18] dark:text-[#EBE7DE] leading-snug">
                       {currentCard.colloquial[0] || phonetics.meaning}
                     </h3>
 
                     {currentCard.colloquial.length > 1 && (
-                      <p className="text-sm text-[#4A463F] dark:text-[#C5C0B5]">
+                      <p className="text-xs sm:text-sm text-[#4A463F] dark:text-[#C5C0B5]">
                         <span className="text-[#857F74] dark:text-[#8A857C] mr-1.5">
                           Também vale:
                         </span>
@@ -514,7 +528,7 @@ export const StudyView = memo(function StudyView({
                       </p>
                     )}
 
-                    <div className="text-xs text-[#6B655C] dark:text-[#AFAAA0] flex flex-wrap items-center gap-x-2 gap-y-1 pt-0.5">
+                    <div className="text-[11px] sm:text-xs text-[#6B655C] dark:text-[#AFAAA0] flex flex-wrap items-center gap-x-2 gap-y-0.5 pt-0.5">
                       <span>
                         Sentido literal:{' '}
                         <span className="font-medium text-[#1C1B18] dark:text-[#DCD8CE]">
@@ -534,12 +548,12 @@ export const StudyView = memo(function StudyView({
 
                   {/* Translated Examples */}
                   <div
-                    className="space-y-2 pt-2.5 border-t border-[#ECE9E1] dark:border-[#2D332D]"
+                    className="space-y-1.5 sm:space-y-2 pt-2 sm:pt-2.5 border-t border-[#ECE9E1] dark:border-[#2D332D]"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="rounded-xl bg-[#F3F1EC] dark:bg-[#2B302B] px-3.5 py-2.5 text-xs sm:text-sm space-y-1">
+                    <div className="rounded-xl bg-[#F3F1EC] dark:bg-[#2B302B] px-3 py-2 sm:px-3.5 sm:py-2.5 text-xs sm:text-sm space-y-0.5 sm:space-y-1">
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-[#6B655C] dark:text-[#B9B4AA]">
+                        <p className="text-[#6B655C] dark:text-[#B9B4AA] leading-snug">
                           01 · &ldquo;{currentCard.exampleEn}&rdquo;
                         </p>
                         <SentenceAudioButtons
@@ -555,9 +569,9 @@ export const StudyView = memo(function StudyView({
                         &rarr; {currentCard.examplePt}
                       </p>
                     </div>
-                    <div className="rounded-xl bg-[#F3F1EC] dark:bg-[#2B302B] px-3.5 py-2.5 text-xs sm:text-sm space-y-1">
+                    <div className="rounded-xl bg-[#F3F1EC] dark:bg-[#2B302B] px-3 py-2 sm:px-3.5 sm:py-2.5 text-xs sm:text-sm space-y-0.5 sm:space-y-1">
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-[#6B655C] dark:text-[#B9B4AA]">
+                        <p className="text-[#6B655C] dark:text-[#B9B4AA] leading-snug">
                           02 · &ldquo;{secondExample.en}&rdquo;
                         </p>
                         <SentenceAudioButtons
@@ -579,7 +593,7 @@ export const StudyView = memo(function StudyView({
                   {phonetics.ukNote && (
                     <div
                       onClick={(e) => e.stopPropagation()}
-                      className="rounded-xl border border-[#DCE5E2] dark:border-[#2F4B46] bg-[#F4F8F7] dark:bg-[#1C2C29] px-3.5 py-2.5 text-xs text-[#224F48] dark:text-[#B5DFD8] leading-relaxed flex flex-wrap items-center justify-between gap-2"
+                      className="rounded-xl border border-[#DCE5E2] dark:border-[#2F4B46] bg-[#F4F8F7] dark:bg-[#1C2C29] px-3 py-2 sm:px-3.5 sm:py-2.5 text-[11px] sm:text-xs text-[#224F48] dark:text-[#B5DFD8] leading-snug sm:leading-relaxed flex flex-wrap items-center justify-between gap-2"
                     >
                       <div>
                         <span className="font-semibold mr-1">Contraste US &amp; UK:</span>
@@ -594,7 +608,7 @@ export const StudyView = memo(function StudyView({
                               speed: speechSpeed,
                             })
                           }
-                          className="min-h-[38px] lg:min-h-[30px] inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#243B53] hover:bg-[#1B2D40] text-white dark:bg-[#2E4C6B] dark:hover:bg-[#375A7F] dark:text-[#F4F7F8] text-[11px] font-semibold whitespace-nowrap shrink-0 cursor-pointer"
+                          className="min-h-[34px] lg:min-h-[30px] inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-lg bg-[#243B53] hover:bg-[#1B2D40] text-white dark:bg-[#2E4C6B] dark:hover:bg-[#375A7F] dark:text-[#F4F7F8] text-[11px] font-semibold whitespace-nowrap shrink-0 cursor-pointer"
                         >
                           {isPlaying(phonetics.ukVariantTerm, 'uk') ? (
                             <AudioWaveIcon className="w-3 h-3" />
@@ -603,7 +617,7 @@ export const StudyView = memo(function StudyView({
                           )}
                           <span>
                             {isPlaying(phonetics.ukVariantTerm, 'uk')
-                              ? 'Ouvindo variante UK...'
+                              ? 'Ouvindo UK...'
                               : 'Ouvir variante UK'}
                           </span>
                         </button>
@@ -613,7 +627,7 @@ export const StudyView = memo(function StudyView({
 
                   {/* Teacher Tip */}
                   {currentCard.tip && (
-                    <div className="rounded-xl bg-[#EAF3F1]/70 dark:bg-[#1E312E]/80 px-3.5 py-2.5 text-xs text-[#28564F] dark:text-[#B5DFD8] leading-relaxed">
+                    <div className="rounded-xl bg-[#EAF3F1]/70 dark:bg-[#1E312E]/80 px-3 py-2 sm:px-3.5 sm:py-2.5 text-[11px] sm:text-xs text-[#28564F] dark:text-[#B5DFD8] leading-snug sm:leading-relaxed">
                       <span className="font-semibold mr-1">Dica de uso:</span>
                       {currentCard.tip}
                     </div>
@@ -626,7 +640,7 @@ export const StudyView = memo(function StudyView({
                     e.stopPropagation();
                     onToggleFlip();
                   }}
-                  className="mt-3 mx-auto min-h-[36px] text-center text-[11px] text-[#857F74] dark:text-[#8A857C] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  className="mt-2 sm:mt-3 mx-auto min-h-[28px] sm:min-h-[36px] text-center text-[10.5px] sm:text-[11px] text-[#7D776C] dark:text-[#989388] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <RotateCw className="w-3 h-3" />
                   <span>Toque para voltar à frente</span>
@@ -635,15 +649,15 @@ export const StudyView = memo(function StudyView({
             </article>
           </div>
 
-          {/* Bottom Decision & Navigation Controls — >= 48px Touch Targets on Mobile */}
-          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center justify-between gap-2.5 pt-1 select-none">
+          {/* Bottom Decision & Navigation Controls — Balanced Single-Viewport Mobile Scale */}
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center justify-between gap-2 sm:gap-2.5 pt-0.5 sm:pt-1 select-none">
             <button
               type="button"
               onClick={() => {
                 void triggerTap();
                 onPrev();
               }}
-              className="order-3 sm:order-1 min-h-[48px] inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] text-xs font-semibold text-[#5C574E] dark:text-[#D8D4CA] hover:text-[#1C1B18] dark:hover:text-[#F4F7F6] transition-colors whitespace-nowrap shrink-0 cursor-pointer active:scale-[0.98]"
+              className="order-3 sm:order-1 min-h-[44px] sm:min-h-[48px] inline-flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl border border-[#DFDAD0] dark:border-[#2E332E] bg-white dark:bg-[#212421] text-xs font-semibold text-[#5C574E] dark:text-[#D8D4CA] hover:text-[#1C1B18] dark:hover:text-[#F4F7F6] transition-colors whitespace-nowrap shrink-0 cursor-pointer active:scale-[0.98]"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Anterior</span>
@@ -653,7 +667,7 @@ export const StudyView = memo(function StudyView({
               <button
                 type="button"
                 onClick={() => onMarkStatus('review')}
-                className="min-h-[48px] inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-[#E5C9A3] dark:border-[#574328] bg-[#FDF5E8] hover:bg-[#FAEBCE] dark:bg-[#2B2318] dark:hover:bg-[#352B1D] text-[#9A5B13] dark:text-[#E6B472] text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer active:scale-[0.98]"
+                className="min-h-[44px] sm:min-h-[48px] inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-[#E5C9A3] dark:border-[#574328] bg-[#FDF5E8] hover:bg-[#FAEBCE] dark:bg-[#2B2318] dark:hover:bg-[#352B1D] text-[#9A5B13] dark:text-[#E6B472] text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer active:scale-[0.98]"
               >
                 <Clock className="w-4 h-4 shrink-0" />
                 <span>Revisar depois</span>
@@ -665,7 +679,7 @@ export const StudyView = memo(function StudyView({
               <button
                 type="button"
                 onClick={() => onMarkStatus('mastered')}
-                className="min-h-[48px] inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#28665E] hover:bg-[#1F524B] dark:bg-[#2A6D63] dark:hover:bg-[#327D72] text-white dark:text-[#F4F7F6] text-xs font-semibold shadow-xs transition-colors whitespace-nowrap shrink-0 cursor-pointer active:scale-[0.98]"
+                className="min-h-[44px] sm:min-h-[48px] inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-[#28665E] hover:bg-[#1F524B] dark:bg-[#2A6D63] dark:hover:bg-[#327D72] text-white dark:text-[#F4F7F6] text-xs font-semibold shadow-xs transition-colors whitespace-nowrap shrink-0 cursor-pointer active:scale-[0.98]"
               >
                 <Check className="w-4 h-4 shrink-0" />
                 <span>Já dominei!</span>
@@ -681,7 +695,7 @@ export const StudyView = memo(function StudyView({
                 void triggerTap();
                 onNext();
               }}
-              className="order-4 sm:order-3 min-h-[48px] inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] text-xs font-semibold text-[#5C574E] dark:text-[#D8D4CA] hover:text-[#1C1B18] dark:hover:text-[#F4F7F6] transition-colors whitespace-nowrap shrink-0 cursor-pointer active:scale-[0.98]"
+              className="order-4 sm:order-3 min-h-[44px] sm:min-h-[48px] inline-flex items-center justify-center gap-1.5 px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl border border-[#DFDAD0] dark:border-[#2E332E] bg-white dark:bg-[#212421] text-xs font-semibold text-[#5C574E] dark:text-[#D8D4CA] hover:text-[#1C1B18] dark:hover:text-[#F4F7F6] transition-colors whitespace-nowrap shrink-0 cursor-pointer active:scale-[0.98]"
             >
               <span>Próximo</span>
               <ArrowRight className="w-4 h-4" />

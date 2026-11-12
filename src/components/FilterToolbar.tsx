@@ -36,14 +36,14 @@ export const FilterToolbar = memo(function FilterToolbar({
     (selectedStatus !== 'all' ? 1 : 0);
 
   return (
-    <section className="rounded-2xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white/85 dark:bg-[#212421]/95 backdrop-blur-xs px-3.5 sm:px-4 py-3 transition-colors">
-      {/* Top compact bar: Topic quick pills + Status + Toggle details */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5">
-        <div className="flex flex-wrap items-center gap-1.5">
+    <section className="rounded-2xl border border-[#DFDAD0] dark:border-[#2E332E] bg-white/90 dark:bg-[#212421]/95 backdrop-blur-xs px-3 sm:px-4 py-2 sm:py-3 shadow-2xs transition-colors">
+      {/* Top compact bar: Smooth horizontal topic scroller on mobile + Status + Toggle details */}
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-2 sm:gap-2.5">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5 sm:pb-0 sm:flex-wrap">
           <button
             type="button"
             onClick={() => onChangeCategory('all')}
-            className={`min-h-[48px] lg:min-h-[34px] px-3 py-1.5 rounded-xl lg:rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+            className={`min-h-[36px] sm:min-h-[38px] lg:min-h-[34px] px-2.5 sm:px-3 py-1 rounded-xl lg:rounded-lg text-[11px] sm:text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
               selectedCategory === 'all'
                 ? 'bg-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
                 : 'bg-[#F0EDE6] dark:bg-[#292D29] text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE]'
@@ -60,7 +60,7 @@ export const FilterToolbar = memo(function FilterToolbar({
                 key={folder}
                 type="button"
                 onClick={() => onChangeCategory(folder)}
-                className={`min-h-[48px] lg:min-h-[34px] inline-flex items-center gap-1 px-3 py-1.5 rounded-xl lg:rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                className={`min-h-[36px] sm:min-h-[38px] lg:min-h-[34px] inline-flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-xl lg:rounded-lg text-[11px] sm:text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   isSelected
                     ? isMari
                       ? 'bg-[#8F5A1C] text-white dark:bg-[#9E6520] dark:text-[#FBF7F0]'
@@ -76,12 +76,12 @@ export const FilterToolbar = memo(function FilterToolbar({
           })}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2">
           <select
             aria-label="Filtrar por status de domínio"
             value={selectedStatus}
             onChange={(e) => onChangeStatus(e.target.value as StatusFilter)}
-            className="min-h-[48px] lg:min-h-[34px] px-2.5 py-1.5 rounded-xl lg:rounded-lg border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-xs font-medium text-[#1C1B18] dark:text-[#EBE7DE] focus:outline-none focus:ring-2 focus:ring-[#28665E]/30 cursor-pointer"
+            className="min-h-[36px] sm:min-h-[38px] lg:min-h-[34px] flex-1 sm:flex-initial px-2.5 py-1 rounded-xl lg:rounded-lg border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-[11px] sm:text-xs font-medium text-[#1C1B18] dark:text-[#EBE7DE] focus:outline-none focus:ring-2 focus:ring-[#28665E]/30 cursor-pointer"
           >
             <option value="all">Todos os status</option>
             <option value="unseen">Não dominados</option>
@@ -94,7 +94,7 @@ export const FilterToolbar = memo(function FilterToolbar({
               type="button"
               onClick={onShuffle}
               title="Embaralhar ordem dos cards"
-              className="min-h-[48px] lg:min-h-[34px] inline-flex items-center gap-1.5 px-3 lg:px-2.5 py-1.5 rounded-xl lg:rounded-lg border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-xs font-medium text-[#5C574E] dark:text-[#D8D4CA] hover:text-[#1C1B18] dark:hover:text-[#F4F7F6] transition-colors cursor-pointer"
+              className="min-h-[36px] sm:min-h-[38px] lg:min-h-[34px] inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl lg:rounded-lg border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-[11px] sm:text-xs font-medium text-[#5C574E] dark:text-[#D8D4CA] hover:text-[#1C1B18] dark:hover:text-[#F4F7F6] transition-colors shrink-0 cursor-pointer"
             >
               <Shuffle className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Embaralhar</span>
@@ -104,7 +104,7 @@ export const FilterToolbar = memo(function FilterToolbar({
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className={`min-h-[48px] lg:min-h-[34px] inline-flex items-center gap-1 px-3 lg:px-2.5 py-1.5 rounded-xl lg:rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+            className={`min-h-[36px] sm:min-h-[38px] lg:min-h-[34px] inline-flex items-center gap-1 px-2.5 py-1 rounded-xl lg:rounded-lg border text-[11px] sm:text-xs font-medium transition-colors shrink-0 cursor-pointer ${
               expanded || selectedSubtopic !== 'all'
                 ? 'border-[#28665E]/40 dark:border-[#2F4B46] bg-[#EAF3F1] dark:bg-[#1E312E] text-[#28665E] dark:text-[#86CEC2]'
                 : 'border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-[#5C574E] dark:text-[#AFAAA0]'

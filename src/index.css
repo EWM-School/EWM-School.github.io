@@ -187,6 +187,15 @@
   animation: cardEnter 210ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Native-like clean horizontal pill scroller on mobile */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Custom subtle scrollbars */
 ::-webkit-scrollbar {
   width: 7px;

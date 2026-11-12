@@ -37,11 +37,16 @@ export interface NativeLifecycleHandlers {
    * Fired whenever the app returns to the foreground (native resume or browser tab visible).
    */
   onAppForeground?: () => void;
+  /**
+   * Fired when an Android App Link / iOS Universal Link (`https://ewm-school.github.io/...`)
+   * opens or resumes the native app.
+   */
+  onDeepLinkUrl?: (url: string) => void;
 }
 
 /**
- * Unified lifecycle bridge for Android hardware back button and foreground resume events,
- * with clean browser fallback via `visibilitychange`.
+ * Unified lifecycle bridge for Android hardware back button, App Links (`appUrlOpen`),
+ * and foreground resume events, with clean browser fallback via `visibilitychange`.
  */
 export function registerHybridLifecycleListeners(
   handlers: NativeLifecycleHandlers
@@ -86,6 +91,29 @@ export function registerHybridLifecycleListeners(
           cleanups.push(() => {
             void handle.remove();
           });
+        }
+      })
+      .catch(() => {});
+
+    void CapacitorApp.addListener('appUrlOpen', ({ url }) => {
+      if (!active || !url) return;
+      handlers.onDeepLinkUrl?.(url);
+    })
+      .then((handle) => {
+        if (!active) {
+          void handle.remove();
+        } else {
+          cleanups.push(() => {
+            void handle.remove();
+          });
+        }
+      })
+      .catch(() => {});
+
+    void CapacitorApp.getLaunchUrl()
+      .then((launch) => {
+        if (active && launch?.url) {
+          handlers.onDeepLinkUrl?.(launch.url);
         }
       })
       .catch(() => {});

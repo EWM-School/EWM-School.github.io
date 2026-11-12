@@ -14,10 +14,20 @@ concurrency:
 
 jobs:
   build-android:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        !contains(github.event.head_commit.message, '[skip ci]') &&
+        !contains(github.event.head_commit.message, '[ci skip]') &&
+        github.actor != 'github-actions[bot]'
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v4
@@ -40,6 +50,9 @@ jobs:
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
+
+      - name: Auto-increment semantic version (v1.2.x) & Android versionCode
+        run: node scripts/ci-bump-version.mjs
 
       - name: Build production web bundle & sync Capacitor Android
         run: |
@@ -105,6 +118,8 @@ jobs:
             echo "Error: Release AAB not found!"
             exit 1
           fi
+          cp "$APK_SOURCE" "$RUNNER_TEMP/EWM-Keep-Practicing.apk"
+          cp "$AAB_SOURCE" "$RUNNER_TEMP/EWM-Keep-Practicing.aab"
           cp "$APK_SOURCE" ./EWM-Keep-Practicing.apk
           cp "$AAB_SOURCE" ./EWM-Keep-Practicing.aab
           jarsigner -verify ./EWM-Keep-Practicing.aab
@@ -119,7 +134,7 @@ jobs:
             ./EWM-Keep-Practicing.aab
           retention-days: 30
 
-      - name: Publish / Update Official Latest GitHub Release (APK + AAB)
+      - name: Publish Official Latest GitHub Release (APK + AAB)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -127,17 +142,35 @@ jobs:
           TAG="v${APP_VER}"
           TITLE="EWM · Keep practicing — Release Oficial Mobile ($TAG)"
           NOTES=$(cat <<EOF
-          ### 📱 EWM · Keep practicing — Aplicativo Oficial ($TAG)
+          ### 📱 EWM · Keep practicing — Aplicativo Oficial ($TAG · Build #${NEXT_VERSION_CODE})
 
           Pacotes oficiais assinados compilados automaticamente em **https://ewm-school.github.io/**:
-          - **\`EWM-Keep-Practicing.apk\`** — Instalador direto para smartphones Android (com ícone oficial EWM, Splash Screen nativa, vozes US/UK nativas, vibração tátil e modo 100% Offline-First).
+          - **\`EWM-Keep-Practicing.apk\`** — Instalador direto para smartphones Android (com App Links verificados, ícone oficial EWM, Splash Screen nativa, vozes US/UK nativas, vibração tátil e modo 100% Offline-First).
           - **\`EWM-Keep-Practicing.aab\`** — Pacote *Android App Bundle* assinado pronto para publicação no **Google Play Console**.
+          - **Política de Privacidade Oficial (LGPD):** https://ewm-school.github.io/privacy.html
           EOF
           )
 
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" ./EWM-Keep-Practicing.apk ./EWM-Keep-Practicing.aab --clobber
+            gh release upload "$TAG" "$RUNNER_TEMP/EWM-Keep-Practicing.apk" "$RUNNER_TEMP/EWM-Keep-Practicing.aab" --clobber
             gh release edit "$TAG" --latest --draft=false --prerelease=false --title "$TITLE" --notes "$NOTES"
           else
-            gh release create "$TAG" ./EWM-Keep-Practicing.apk ./EWM-Keep-Practicing.aab --latest --title "$TITLE" --notes "$NOTES"
+            gh release create "$TAG" "$RUNNER_TEMP/EWM-Keep-Practicing.apk" "$RUNNER_TEMP/EWM-Keep-Practicing.aab" --latest --title "$TITLE" --notes "$NOTES"
+          fi
+
+      - name: Commit bumped semantic version back to main with [skip ci]
+        run: |
+          cp package.json "$RUNNER_TEMP/package.json.bumped"
+          cp android/app/build.gradle "$RUNNER_TEMP/build.gradle.bumped"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git reset --hard HEAD
+          git clean -fd
+          git pull --rebase origin main
+          cp "$RUNNER_TEMP/package.json.bumped" package.json
+          cp "$RUNNER_TEMP/build.gradle.bumped" android/app/build.gradle
+          if ! git diff --quiet package.json android/app/build.gradle; then
+            git add package.json android/app/build.gradle
+            git commit -m "chore(release): bump version to v${NEXT_VERSION} (code ${NEXT_VERSION_CODE}) [skip ci]"
+            git push origin HEAD:main
           fi

@@ -20,6 +20,7 @@ import {
   grantCoAdminByUid,
   revokeCoAdminByUid,
   subscribeGlobalCards,
+  subscribeGlobalLeaderboard,
   subscribeGrantedAdmins,
   subscribeUserCloudData,
   upsertGlobalCardAsAdmin,
@@ -59,6 +60,7 @@ import {
   recordCustomCardUpsertOptimistic,
   recordDeckDeleteOptimistic,
   recordDeckUpsertOptimistic,
+  recordLeaderboardScoreOptimistic,
   recordQuizScoreOptimistic,
   recordWorkspaceUpdateOptimistic,
   replaceCustomCardsLocal,
@@ -108,11 +110,18 @@ import {
   toggleSpeechSpeed,
 } from './utils/speech';
 import {
+  computeRealStudentMetrics,
+  formatLeaderboardIdentity,
+  getCurrentMonthKey,
+  loadCachedLeaderboardRecords,
   recordCardReviewInStats,
   recordStudyTimeInStats,
+  saveCachedLeaderboardRecords,
   setDailyGoalInStats,
+  type CloudLeaderboardRecord,
   type UserStudyStats,
 } from './utils/studyMetrics';
+import type { ShareCardPayload } from './utils/shareCardGenerator';
 
 // Lazy-loaded heavy screens & modals for 60fps instant startup
 const LazyDecksView = lazy(() =>
@@ -143,6 +152,11 @@ const LazyMonthlyRankingModal = lazy(() =>
 const LazyDownloadAppModal = lazy(() =>
   import('./components/DownloadAppModal').then((m) => ({
     default: m.DownloadAppModal,
+  }))
+);
+const LazyShareStoryModal = lazy(() =>
+  import('./components/ShareStoryModal').then((m) => ({
+    default: m.ShareStoryModal,
   }))
 );
 
@@ -236,6 +250,10 @@ export default function App() {
   const [pendingDeleteDeck, setPendingDeleteDeck] = useState<UserDeck | null>(null);
 
   const [userStats, setUserStats] = useState<UserStudyStats>(initialLegacy.studyStats);
+  const [cloudLeaderboard, setCloudLeaderboard] = useState<CloudLeaderboardRecord[]>(() =>
+    loadCachedLeaderboardRecords()
+  );
+  const [sharePayload, setSharePayload] = useState<ShareCardPayload | null>(null);
   const [availableUpdate, setAvailableUpdate] = useState<AppUpdateInfo | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -322,8 +340,9 @@ export default function App() {
     };
   }, []);
 
-  // Native Android Hardware Back Button + Foreground Resume Queue Flush
+  // Native Android Hardware Back Button + Foreground Resume Queue Flush + Verified Deep Links
   const navStateRef = useRef({
+    sharePayload,
     authModalOpen,
     reminderModalOpen,
     downloadModalOpen,
@@ -338,6 +357,7 @@ export default function App() {
     activeTab,
   });
   navStateRef.current = {
+    sharePayload,
     authModalOpen,
     reminderModalOpen,
     downloadModalOpen,
@@ -356,6 +376,10 @@ export default function App() {
     return registerHybridLifecycleListeners({
       onBackButton: () => {
         const s = navStateRef.current;
+        if (s.sharePayload) {
+          setSharePayload(null);
+          return true;
+        }
         if (s.pendingDeleteCard) {
           setPendingDeleteCard(null);
           return true;
@@ -412,6 +436,37 @@ export default function App() {
         void checkForAppReleaseUpdate().then((info) => {
           if (info) setAvailableUpdate(info);
         });
+      },
+      onDeepLinkUrl: (incomingUrl: string) => {
+        try {
+          const parsed = new URL(incomingUrl);
+          const tabParam = parsed.searchParams.get('tab');
+          const studyParam = parsed.searchParams.get('study') || parsed.searchParams.get('autostart');
+          const rankingParam = parsed.searchParams.get('ranking');
+          const downloadParam = parsed.searchParams.get('download');
+
+          if (downloadParam === '1' || downloadParam === 'true') {
+            setDownloadModalOpen(true);
+            return;
+          }
+          if (rankingParam === '1' || rankingParam === 'true') {
+            setRankingModalOpen(true);
+          }
+          if (
+            tabParam === 'study' ||
+            tabParam === 'decks' ||
+            tabParam === 'quiz' ||
+            tabParam === 'list'
+          ) {
+            setActiveTab(tabParam);
+            setShowCover(false);
+          } else if (studyParam === '1' || studyParam === 'true') {
+            setActiveTab('study');
+            setShowCover(false);
+          }
+        } catch {
+          // ignore malformed URL
+        }
       },
     });
   }, []);
@@ -534,10 +589,11 @@ export default function App() {
     return () => unsubAuth();
   }, []);
 
-  // 2. Subscribe to Global Official Cards once Auth state is initialized & cache in IndexedDB
+  // 2. Subscribe to Global Official Cards & Community Leaderboard once Auth state is initialized
   useEffect(() => {
     if (!isAuthReady) return;
     let unsubGlobal: (() => void) | null = null;
+    let unsubLeaderboard: (() => void) | null = null;
     try {
       unsubGlobal = subscribeGlobalCards((items) => {
         setGlobalCards(items);
@@ -546,8 +602,17 @@ export default function App() {
     } catch {
       // handled inside subscribeGlobalCards
     }
+    try {
+      unsubLeaderboard = subscribeGlobalLeaderboard(getCurrentMonthKey(), (entries) => {
+        setCloudLeaderboard(entries);
+        saveCachedLeaderboardRecords(entries);
+      });
+    } catch {
+      // handled inside subscribeGlobalLeaderboard
+    }
     return () => {
       if (unsubGlobal) unsubGlobal();
+      if (unsubLeaderboard) unsubLeaderboard();
     };
   }, [isAuthReady, isOnline]);
 
@@ -936,6 +1001,7 @@ export default function App() {
           target.tagName === 'SELECT');
 
       if (e.key === 'Escape') {
+        setSharePayload(null);
         setCardModalOpen(false);
         setAdminModalOpen(false);
         setPhoneticModalOpen(false);
@@ -951,6 +1017,7 @@ export default function App() {
       if (
         isInput ||
         showCover ||
+        sharePayload ||
         cardModalOpen ||
         adminModalOpen ||
         phoneticModalOpen ||
@@ -1025,6 +1092,7 @@ export default function App() {
     activeTab,
     showCover,
     focusMode,
+    sharePayload,
     cardModalOpen,
     adminModalOpen,
     phoneticModalOpen,
@@ -1511,6 +1579,52 @@ export default function App() {
     [cards.length, masteredCardsCount, reviewCardsCount]
   );
 
+  // Sync authenticated student's legitimate Ranking score to Cloud + Offline SyncQueue automatically
+  const lastSyncedLeaderboardScoreRef = useRef<number>(0);
+  useEffect(() => {
+    if (!currentUser || !canSyncUserWithCloud(currentUser)) {
+      lastSyncedLeaderboardScoreRef.current = 0;
+      return;
+    }
+
+    const realMetrics = computeRealStudentMetrics({
+      stats: userStats,
+      masteredCount: masteredCardsCount,
+      reviewCount: reviewCardsCount,
+      quizScore,
+    });
+
+    if (realMetrics.score <= 0 || realMetrics.score === lastSyncedLeaderboardScoreRef.current) {
+      return;
+    }
+
+    lastSyncedLeaderboardScoreRef.current = realMetrics.score;
+    const identity = formatLeaderboardIdentity(currentUser.displayName, currentUser.email);
+
+    void recordLeaderboardScoreOptimistic({
+      name: identity.name,
+      shortName: identity.shortName,
+      initials: identity.initials,
+      avatarUrl: currentUser.photoURL || undefined,
+      monthKey: getCurrentMonthKey(),
+      score: realMetrics.score,
+      cardsReviewed: realMetrics.cardsReviewed,
+      masteredCount: realMetrics.masteredCount,
+      reviewCount: realMetrics.reviewCount,
+      quizScore: realMetrics.quizScore,
+      activeDays: realMetrics.activeDays,
+      studyTimeMinutes: realMetrics.studyTimeMinutes,
+      minutosEstudados: realMetrics.minutosEstudados,
+      statusText: realMetrics.statusText,
+    });
+  }, [
+    currentUser,
+    userStats,
+    masteredCardsCount,
+    reviewCardsCount,
+    quizScore,
+  ]);
+
   return (
     <div className="min-h-screen flex flex-col">
       {showCover ? (
@@ -1526,6 +1640,9 @@ export default function App() {
           syncLabel={syncLabel}
           userDisplayName={currentUser?.displayName || null}
           userEmail={currentUser?.email || null}
+          currentUid={currentUser?.uid || null}
+          quizScore={quizScore}
+          cloudLeaderboard={cloudLeaderboard}
           isAdmin={isAdmin}
           isSigningIn={isSigningIn}
           stats={userStats}
@@ -1567,7 +1684,7 @@ export default function App() {
             onOpenAdminPanel={() => setAdminModalOpen(true)}
           />
 
-          <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-5 sm:py-7 space-y-5 ios-safe-main">
+          <main className="flex-1 max-w-6xl w-full mx-auto px-3.5 sm:px-6 py-3 sm:py-7 space-y-3 sm:space-y-5 ios-safe-main">
             {!focusMode && (activeTab === 'study' || activeTab === 'list') && (
               <FilterToolbar
                 selectedCategory={selectedCategory}
@@ -1618,6 +1735,7 @@ export default function App() {
                 onGoToDecks={() => setActiveTab('decks')}
                 onEditCard={handleEditCard}
                 onDeleteCard={setPendingDeleteCard}
+                onShareCard={(card) => setSharePayload({ kind: 'flashcard', card })}
                 onToggleFocusMode={() => setFocusMode((v) => !v)}
                 onResetFilters={() => {
                   setSelectedCategory('all');
@@ -1675,6 +1793,14 @@ export default function App() {
                   onSelectOption={handleSelectQuizOption}
                   onNextQuestion={handleNextQuizQuestion}
                   onResetScore={handleResetQuizScore}
+                  onShareQuizAchievement={(featuredCard) =>
+                    setSharePayload({
+                      kind: 'quiz',
+                      score: quizScore,
+                      totalAnswered: quizTotal,
+                      featuredCard,
+                    })
+                  }
                 />
               </Suspense>
             )}
@@ -1817,7 +1943,27 @@ export default function App() {
             onClose={() => setRankingModalOpen(false)}
             stats={userStats}
             userDisplayName={currentUser?.displayName || null}
+            userEmail={currentUser?.email || null}
+            currentUid={currentUser?.uid || null}
+            masteredCount={masteredCardsCount}
+            reviewCount={reviewCardsCount}
+            quizScore={quizScore}
+            cloudLeaderboard={cloudLeaderboard}
             onUpdateGoal={handleUpdateGoal}
+            onShareAchievement={(payload) => {
+              setRankingModalOpen(false);
+              setSharePayload(payload);
+            }}
+          />
+        </Suspense>
+      )}
+
+      {sharePayload && (
+        <Suspense fallback={null}>
+          <LazyShareStoryModal
+            payload={sharePayload}
+            onClose={() => setSharePayload(null)}
+            onNotify={showToast}
           />
         </Suspense>
       )}

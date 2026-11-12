@@ -40,43 +40,43 @@ export function DailyGoalProgressBar({
   const currentMonthName = getMonthNamePt();
 
   return (
-    <div className="relative rounded-2xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white/95 dark:bg-[#212421]/95 p-3.5 sm:p-4 shadow-xs backdrop-blur-xs transition-colors">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="relative rounded-2xl border border-[#DFDAD0] dark:border-[#2E332E] bg-white/95 dark:bg-[#212421]/95 p-2.5 sm:p-4 shadow-2xs backdrop-blur-xs transition-colors">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
         {/* Left: Flame / Title & Goal Count */}
-        <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
           <div
-            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
               isGoalReached
                 ? 'bg-[#FEF3C7] dark:bg-[#78350F]/40 text-[#D97706] dark:text-[#FBBF24]'
                 : 'bg-[#EAF3F1] dark:bg-[#1E312E] text-[#28665E] dark:text-[#68B4A8]'
             }`}
           >
             {isGoalReached ? (
-              <Sparkles className="w-5 h-5 animate-pulse" />
+              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 animate-pulse" />
             ) : (
-              <Flame className="w-5 h-5" />
+              <Flame className="w-4 h-4 sm:w-5 sm:h-5" />
             )}
           </div>
 
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-display text-sm font-bold text-[#1C1B18] dark:text-[#EBE7DE]">
-                Meta Diária de Revisão
+              <span className="font-display text-xs sm:text-sm font-bold text-[#1C1B18] dark:text-[#EBE7DE]">
+                Meta Diária
               </span>
               {isGoalReached && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FEF3C7] dark:bg-[#78350F]/50 text-[#B45309] dark:text-[#FDE68A] border border-[#FDE68A]/60 dark:border-[#B45309]">
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-[#FEF3C7] dark:bg-[#78350F]/50 text-[#B45309] dark:text-[#FDE68A] border border-[#FDE68A]/60 dark:border-[#B45309]">
                   <CheckCircle2 className="w-3 h-3" />
                   Meta Atingida!
                 </span>
               )}
             </div>
 
-            <p className="text-xs text-[#6B655C] dark:text-[#AFAAA0] mt-0.5 flex items-center gap-1.5 font-mono-num">
+            <p className="text-[11px] sm:text-xs text-[#6B655C] dark:text-[#AFAAA0] mt-0.2 flex items-center gap-1.5 font-mono-num">
               <span>
                 <strong className="text-[#1C1B18] dark:text-[#EBE7DE] font-bold">
                   {todayCount}
                 </strong>{' '}
-                de {goal} cards revisados hoje
+                / {goal} hoje
               </span>
               <span aria-hidden="true" className="opacity-40">·</span>
               <span className="font-bold text-[#28665E] dark:text-[#68B4A8]">
@@ -87,20 +87,23 @@ export function DailyGoalProgressBar({
         </div>
 
         {/* Right: Monthly Quick Stats Badges & Goal Config Button */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Monthly Badges (Clickable to open detailed ranking/metrics) */}
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           <button
             type="button"
             onClick={onOpenMonthlyStats}
             title="Ver estatísticas mensais e ranking"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-[#ECE8DF] dark:border-[#2F342F] bg-[#FAF9F6] dark:bg-[#1C1F1C] hover:border-[#28665E] dark:hover:border-[#68B4A8] text-xs text-[#5C574E] dark:text-[#D4CFC5] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl border border-[#ECE8DF] dark:border-[#2F342F] bg-[#FAF9F6] dark:bg-[#1C1F1C] hover:border-[#28665E] dark:hover:border-[#68B4A8] text-[11px] sm:text-xs text-[#5C574E] dark:text-[#D4CFC5] transition-colors cursor-pointer"
           >
-            <span className="text-[13px]">📅</span>
+            <span className="text-xs">📅</span>
             <span className="font-medium">
               <strong className="text-[#1C1B18] dark:text-[#EBE7DE] font-bold font-mono-num">
                 {activeDaysCount}
-              </strong>{' '}
-              {activeDaysCount === 1 ? 'dia' : 'dias'} em {currentMonthName}
+              </strong>
+              <span className="hidden sm:inline">
+                {' '}
+                {activeDaysCount === 1 ? 'dia' : 'dias'} em {currentMonthName}
+              </span>
+              <span className="sm:hidden">d</span>
             </span>
           </button>
 
@@ -108,9 +111,9 @@ export function DailyGoalProgressBar({
             type="button"
             onClick={onOpenMonthlyStats}
             title="Tempo total dedicado este mês"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-[#ECE8DF] dark:border-[#2F342F] bg-[#FAF9F6] dark:bg-[#1C1F1C] hover:border-[#28665E] dark:hover:border-[#68B4A8] text-xs text-[#5C574E] dark:text-[#D4CFC5] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl border border-[#ECE8DF] dark:border-[#2F342F] bg-[#FAF9F6] dark:bg-[#1C1F1C] hover:border-[#28665E] dark:hover:border-[#68B4A8] text-[11px] sm:text-xs text-[#5C574E] dark:text-[#D4CFC5] transition-colors cursor-pointer"
           >
-            <span className="text-[13px]">⏱️</span>
+            <span className="text-xs">⏱️</span>
             <span className="font-medium font-mono-num text-[#1C1B18] dark:text-[#EBE7DE] font-bold">
               {formattedHours}
             </span>
@@ -120,21 +123,21 @@ export function DailyGoalProgressBar({
             type="button"
             onClick={onOpenMonthlyStats}
             title="Ver pódio e ranking dos melhores estudantes"
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-[#ECE8DF] dark:border-[#2F342F] bg-[#FAF9F6] dark:bg-[#1C1F1C] hover:border-[#D97706] text-xs font-semibold text-[#B45309] dark:text-[#FBBF24] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl border border-[#ECE8DF] dark:border-[#2F342F] bg-[#FAF9F6] dark:bg-[#1C1F1C] hover:border-[#D97706] text-[11px] sm:text-xs font-semibold text-[#B45309] dark:text-[#FBBF24] transition-colors cursor-pointer"
           >
             <Trophy className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Ranking</span>
+            <span>Ranking</span>
           </button>
 
           {/* Goal Config dropdown button */}
-          <div className="relative">
+          <div className="relative ml-auto sm:ml-0">
             <button
               type="button"
               onClick={() => setShowGoalPicker((v) => !v)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-[#D4DFDC] dark:border-[#324D48] bg-white dark:bg-[#252A25] text-xs font-semibold text-[#28665E] dark:text-[#86CEC2] hover:bg-[#EAF3F1] dark:hover:bg-[#1E312E] transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl border border-[#D4DFDC] dark:border-[#324D48] bg-white dark:bg-[#252A25] text-[11px] sm:text-xs font-semibold text-[#28665E] dark:text-[#86CEC2] hover:bg-[#EAF3F1] dark:hover:bg-[#1E312E] transition-colors cursor-pointer"
               title="Ajustar meta diária de cards"
             >
-              <Settings className="w-3.5 h-3.5" />
+              <Settings className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
               <span>Meta: {goal}</span>
               <ChevronDown className="w-3 h-3 opacity-60" />
             </button>
@@ -174,8 +177,8 @@ export function DailyGoalProgressBar({
       </div>
 
       {/* Progress Bar Track */}
-      <div className="mt-3">
-        <div className="w-full h-2 rounded-full bg-[#EAE6DD] dark:bg-[#2C302C] overflow-hidden">
+      <div className="mt-2 sm:mt-3">
+        <div className="w-full h-1.5 sm:h-2 rounded-full bg-[#EAE6DD] dark:bg-[#2C302C] overflow-hidden">
           <div
             className={`h-full transition-all duration-500 ease-out rounded-full ${
               isGoalReached

@@ -42,7 +42,8 @@ export type SyncQueueAction =
   | 'DECK_UPSERT'
   | 'DECK_DELETE'
   | 'WORKSPACE_SETTINGS_UPDATE'
-  | 'QUIZ_SCORE_UPDATE';
+  | 'QUIZ_SCORE_UPDATE'
+  | 'LEADERBOARD_SCORE_UPSERT';
 
 export type SyncQueuePayload =
   | {
@@ -81,6 +82,23 @@ export type SyncQueuePayload =
       totalAnswered: number;
       cardId?: string;
       isCorrect?: boolean;
+    }
+  | {
+      type: 'LEADERBOARD_SCORE_UPSERT';
+      name: string;
+      shortName: string;
+      initials: string;
+      avatarUrl?: string;
+      monthKey: string;
+      score: number;
+      cardsReviewed: number;
+      masteredCount: number;
+      reviewCount: number;
+      quizScore: number;
+      activeDays: number;
+      studyTimeMinutes: number;
+      minutosEstudados: number;
+      statusText: string;
     };
 
 export interface SyncQueueItem {

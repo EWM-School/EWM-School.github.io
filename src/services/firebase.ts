@@ -58,6 +58,7 @@ import {
   sanitizeDeckFieldsForFirestore,
   sanitizeWorkspaceFieldsForFirestore,
 } from '../utils/deckHelpers';
+import type { CloudLeaderboardRecord } from '../utils/studyMetrics';
 
 export const BOOTSTRAPPED_ADMIN_EMAIL = 'igordesouzaar@gmail.com';
 
@@ -665,6 +666,121 @@ export async function deleteAllUserCloudData(uid: string): Promise<void> {
   } catch {
     // Ignore if root doc was not created or rules not yet redeployed
   }
+
+  try {
+    await deleteDoc(doc(db, 'leaderboard', uid));
+  } catch {
+    // Ignore if leaderboard entry was not created or rules not yet redeployed
+  }
+}
+
+export interface UpsertLeaderboardPayload {
+  name: string;
+  shortName: string;
+  initials: string;
+  avatarUrl?: string;
+  monthKey: string;
+  score: number;
+  cardsReviewed: number;
+  masteredCount: number;
+  reviewCount: number;
+  quizScore: number;
+  activeDays: number;
+  studyTimeMinutes: number;
+  minutosEstudados: number;
+  statusText: string;
+}
+
+function isPermissionDeniedError(err: unknown): boolean {
+  const code = String((err as { code?: string })?.code || '').toLowerCase();
+  const msg = String((err as { message?: string })?.message || '').toLowerCase();
+  return code.includes('permission-denied') || msg.includes('missing or insufficient permissions');
+}
+
+export async function upsertLeaderboardEntryInCloud(
+  uid: string,
+  payload: UpsertLeaderboardPayload
+): Promise<void> {
+  if (!isValidFirestoreId(uid) || payload.score <= 0) return;
+  const ref = doc(db, 'leaderboard', uid);
+
+  const sanitizedBase = {
+    uid,
+    name: String(payload.name || 'Aluno EWM').trim().slice(0, 80) || 'Aluno EWM',
+    shortName: String(payload.shortName || 'Aluno').trim().slice(0, 40) || 'Aluno',
+    initials: String(payload.initials || 'EW').trim().slice(0, 4) || 'EW',
+    ...(payload.avatarUrl ? { avatarUrl: String(payload.avatarUrl).slice(0, 500) } : {}),
+    monthKey: String(payload.monthKey).slice(0, 7),
+    score: Math.max(0, Math.min(2000000, Math.floor(payload.score || 0))),
+    cardsReviewed: Math.max(0, Math.min(100000, Math.floor(payload.cardsReviewed || 0))),
+    masteredCount: Math.max(0, Math.min(100000, Math.floor(payload.masteredCount || 0))),
+    reviewCount: Math.max(0, Math.min(100000, Math.floor(payload.reviewCount || 0))),
+    quizScore: Math.max(0, Math.min(100000, Math.floor(payload.quizScore || 0))),
+    activeDays: Math.max(0, Math.min(31, Math.floor(payload.activeDays || 0))),
+    studyTimeMinutes: Math.max(0, Math.min(45000, Math.floor(payload.studyTimeMinutes || 0))),
+    minutosEstudados: Math.max(0, Math.min(1440, Math.floor(payload.minutosEstudados || 0))),
+    statusText: String(payload.statusText || 'Estudando no EWM').trim().slice(0, 80) || 'Estudando no EWM',
+    updatedAt: serverTimestamp(),
+  };
+
+  try {
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      await setDoc(ref, {
+        ...sanitizedBase,
+        createdAt: serverTimestamp(),
+      });
+    } else {
+      await updateDoc(ref, sanitizedBase);
+    }
+  } catch (error) {
+    // If live Firebase Console rules haven't deployed `/leaderboard` yet, gracefully skip without clogging SyncQueue
+    if (isPermissionDeniedError(error)) {
+      return;
+    }
+    handleFirestoreError(error, OperationType.WRITE, `leaderboard/${uid}`);
+  }
+}
+
+export function subscribeGlobalLeaderboard(
+  monthKey: string,
+  onEntries: (entries: CloudLeaderboardRecord[]) => void
+): Unsubscribe {
+  const q = query(collection(db, 'leaderboard'), where('monthKey', '==', monthKey));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const records: CloudLeaderboardRecord[] = snap.docs
+        .map((d) => {
+          const data = d.data();
+          return {
+            uid: String(data.uid || d.id),
+            name: String(data.name || 'Aluno EWM'),
+            shortName: String(data.shortName || 'Aluno'),
+            initials: String(data.initials || 'EW'),
+            avatarUrl: typeof data.avatarUrl === 'string' ? data.avatarUrl : undefined,
+            monthKey: String(data.monthKey || monthKey),
+            score: typeof data.score === 'number' ? Math.max(0, Math.floor(data.score)) : 0,
+            cardsReviewed: typeof data.cardsReviewed === 'number' ? Math.max(0, Math.floor(data.cardsReviewed)) : 0,
+            masteredCount: typeof data.masteredCount === 'number' ? Math.max(0, Math.floor(data.masteredCount)) : 0,
+            reviewCount: typeof data.reviewCount === 'number' ? Math.max(0, Math.floor(data.reviewCount)) : 0,
+            quizScore: typeof data.quizScore === 'number' ? Math.max(0, Math.floor(data.quizScore)) : 0,
+            activeDays: typeof data.activeDays === 'number' ? Math.max(0, Math.floor(data.activeDays)) : 0,
+            studyTimeMinutes: typeof data.studyTimeMinutes === 'number' ? Math.max(0, Math.floor(data.studyTimeMinutes)) : 0,
+            minutosEstudados: typeof data.minutosEstudados === 'number' ? Math.max(0, Math.floor(data.minutosEstudados)) : 0,
+            statusText: String(data.statusText || 'Estudando no EWM'),
+            updatedAtMs: extractTimestampMs(data.updatedAt) ?? Date.now(),
+          };
+        })
+        .filter((r) => r.score > 0);
+      onEntries(records);
+    },
+    (error) => {
+      if (!isLikelyNetworkOfflineError(error) && !isPermissionDeniedError(error)) {
+        console.warn('Leaderboard listener warning:', error);
+      }
+    }
+  );
 }
 
 /**

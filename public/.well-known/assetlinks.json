@@ -1,0 +1,15 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.ewm.keeppracticing",
+      "sha256_cert_fingerprints": [
+        "40:17:DD:6B:AA:01:D6:B4:0A:72:A3:8C:95:E8:F8:8F:82:8A:99:27:4C:86:15:05:55:47:AA:6D:17:1A:A0:8A"
+      ]
+    }
+  }
+]

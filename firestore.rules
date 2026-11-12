@@ -419,5 +419,52 @@ service cloud.firestore {
           hasParentWorkspace(userId);
       }
     }
+
+    // 4. Community Monthly Ranking (/leaderboard/{userId}) — LGPD-minimal public metrics (no email/PII)
+    function isValidLeaderboardEntry(data, userId) {
+      return isValidId(userId) &&
+        data.keys().hasAll([
+          'uid', 'name', 'shortName', 'initials', 'monthKey',
+          'score', 'cardsReviewed', 'masteredCount', 'reviewCount',
+          'quizScore', 'activeDays', 'studyTimeMinutes', 'minutosEstudados',
+          'statusText', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'name', 'shortName', 'initials', 'avatarUrl', 'monthKey',
+          'score', 'cardsReviewed', 'masteredCount', 'reviewCount',
+          'quizScore', 'activeDays', 'studyTimeMinutes', 'minutosEstudados',
+          'statusText', 'createdAt', 'updatedAt'
+        ]) &&
+        data.uid == userId &&
+        data.uid == request.auth.uid &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+        data.shortName is string && data.shortName.size() >= 1 && data.shortName.size() <= 40 &&
+        data.initials is string && data.initials.size() >= 1 && data.initials.size() <= 4 &&
+        (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 500)) &&
+        data.monthKey is string && data.monthKey.matches('^[0-9]{4}-[0-9]{2}$') &&
+        data.score is int && data.score >= 0 && data.score <= 2000000 &&
+        data.cardsReviewed is int && data.cardsReviewed >= 0 && data.cardsReviewed <= 100000 &&
+        data.masteredCount is int && data.masteredCount >= 0 && data.masteredCount <= 100000 &&
+        data.reviewCount is int && data.reviewCount >= 0 && data.reviewCount <= 100000 &&
+        data.quizScore is int && data.quizScore >= 0 && data.quizScore <= 100000 &&
+        data.activeDays is int && data.activeDays <= 31 && data.activeDays >= 0 &&
+        data.studyTimeMinutes is int && data.studyTimeMinutes >= 0 && data.studyTimeMinutes <= 45000 &&
+        data.minutosEstudados is int && data.minutosEstudados >= 0 && data.minutosEstudados <= 1440 &&
+        data.statusText is string && data.statusText.size() >= 1 && data.statusText.size() <= 80 &&
+        data.updatedAt is timestamp;
+    }
+
+    match /leaderboard/{userId} {
+      allow get, list: if true;
+      allow create: if isVerifiedUser() &&
+        isValidLeaderboardEntry(incoming(), userId) &&
+        (!('createdAt' in incoming()) || incoming().createdAt == request.time) &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidLeaderboardEntry(incoming(), userId) &&
+        existing().uid == request.auth.uid &&
+        incoming().updatedAt == request.time;
+      allow delete: if (isVerifiedUser() && isValidId(userId) && request.auth.uid == userId) || isAdmin();
+    }
   }
 }

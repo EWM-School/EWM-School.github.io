@@ -4,7 +4,9 @@ import {
   saveCardMastery,
   updateUserWorkspaceSettings,
   upsertCustomCard,
+  upsertLeaderboardEntryInCloud,
   upsertUserDeck,
+  type UpsertLeaderboardPayload,
 } from '../firebase';
 import type {
   CardProgressEntry,
@@ -211,6 +213,25 @@ async function executeQueueItemOnCloud(uid: string, item: SyncQueueItem): Promis
 
     case 'QUIZ_SCORE_UPDATE':
       // Quiz session score is persisted locally in IndexedDB + Preferences and acknowledged cleanly
+      return;
+
+    case 'LEADERBOARD_SCORE_UPSERT':
+      await upsertLeaderboardEntryInCloud(uid, {
+        name: payload.name,
+        shortName: payload.shortName,
+        initials: payload.initials,
+        avatarUrl: payload.avatarUrl,
+        monthKey: payload.monthKey,
+        score: payload.score,
+        cardsReviewed: payload.cardsReviewed,
+        masteredCount: payload.masteredCount,
+        reviewCount: payload.reviewCount,
+        quizScore: payload.quizScore,
+        activeDays: payload.activeDays,
+        studyTimeMinutes: payload.studyTimeMinutes,
+        minutosEstudados: payload.minutosEstudados,
+        statusText: payload.statusText,
+      });
       return;
   }
 }
@@ -553,5 +574,26 @@ export async function recordQuizScoreOptimistic(params: {
     if (getNetworkSnapshot().connected) {
       scheduleFlush(350);
     }
+  }
+}
+
+export async function recordLeaderboardScoreOptimistic(
+  payload: UpsertLeaderboardPayload
+): Promise<void> {
+  if (payload.score <= 0) return;
+
+  await upsertSyncQueueEvent({
+    dedupeKey: `leaderboard:${payload.monthKey}`,
+    action: 'LEADERBOARD_SCORE_UPSERT',
+    payload: {
+      type: 'LEADERBOARD_SCORE_UPSERT',
+      ...payload,
+    },
+    ownerUid: activeUid,
+  });
+
+  await refreshPendingCache();
+  if (activeUid && cloudAuthorized && getNetworkSnapshot().connected) {
+    scheduleFlush(600);
   }
 }

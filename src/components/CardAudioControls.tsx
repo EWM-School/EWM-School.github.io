@@ -66,11 +66,11 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
 
   return (
     <div
-      className="space-y-3 select-none"
+      className="space-y-2 sm:space-y-3 select-none"
       onClick={(e) => e.stopPropagation()}
     >
       {/* Clean Unboxed Comparative US & UK Phonetics */}
-      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs sm:text-[13px] font-mono-num">
+      <div className="flex flex-wrap items-center justify-center gap-x-2.5 sm:gap-x-3 gap-y-0.5 text-[11px] sm:text-[13px] font-mono-num">
         <button
           type="button"
           onClick={() => {
@@ -78,7 +78,7 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
             void toggleSpeakEnglishText(term, 'us', { speed });
           }}
           title="Clique para ouvir a pronúncia americana (en-US)"
-          className={`min-h-[36px] inline-flex items-center gap-1 px-1 transition-opacity cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#28665E] ${
+          className={`min-h-[30px] sm:min-h-[36px] inline-flex items-center gap-1 px-1 transition-opacity cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#28665E] ${
             isPlayingUs
               ? 'text-[#184942] dark:text-[#9FE5D9] font-semibold underline decoration-2 underline-offset-4'
               : isPlayingUk
@@ -101,7 +101,7 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
             void toggleSpeakEnglishText(term, 'uk', { speed });
           }}
           title="Clique para ouvir a pronúncia britânica (en-GB)"
-          className={`min-h-[36px] inline-flex items-center gap-1 px-1 transition-opacity cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#243B53] ${
+          className={`min-h-[30px] sm:min-h-[36px] inline-flex items-center gap-1 px-1 transition-opacity cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#243B53] ${
             isPlayingUk
               ? 'text-[#1B324B] dark:text-[#B4D4F1] font-semibold underline decoration-2 underline-offset-4'
               : isPlayingUs
@@ -114,8 +114,8 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
         </button>
       </div>
 
-      {/* Primary Clickable Hybrid Speech Buttons (US en-US & UK en-GB) — >= 48px Touch Targets */}
-      <div className="grid grid-cols-2 sm:inline-flex items-center justify-center gap-2.5 w-full sm:w-auto max-w-md mx-auto">
+      {/* Primary Clickable Hybrid Speech Buttons (US en-US & UK en-GB) — Ergonomic Mobile Scale */}
+      <div className="grid grid-cols-2 sm:inline-flex items-center justify-center gap-2 sm:gap-2.5 w-full sm:w-auto max-w-md mx-auto">
         <button
           type="button"
           data-testid="card-audio-us"
@@ -130,7 +130,7 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
             void triggerTap();
             void toggleSpeakEnglishText(term, 'us', { speed });
           }}
-          className={`min-h-[48px] inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-[13px] font-semibold transition-all duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#28665E] active:scale-[0.98] ${
+          className={`min-h-[42px] sm:min-h-[48px] inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-[13px] font-semibold transition-all duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#28665E] active:scale-[0.98] ${
             isPlayingUs
               ? 'bg-[#28665E] hover:bg-[#1F524B] dark:bg-[#2A6D63] dark:hover:bg-[#327D72] text-white dark:text-[#F4F7F6] border border-[#28665E] dark:border-[#3E8E82] shadow-xs'
               : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1D302D] dark:hover:bg-[#253D39] text-[#1E4E47] dark:text-[#86CEC2] border border-[#C2DAD5] dark:border-[#2F4B46]'
@@ -172,7 +172,7 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
             void triggerTap();
             void toggleSpeakEnglishText(term, 'uk', { speed });
           }}
-          className={`min-h-[48px] inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-xl text-xs sm:text-[13px] font-semibold transition-all duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#243B53] active:scale-[0.98] ${
+          className={`min-h-[42px] sm:min-h-[48px] inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-[13px] font-semibold transition-all duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#243B53] active:scale-[0.98] ${
             isPlayingUk
               ? 'bg-[#243B53] hover:bg-[#1B2D40] dark:bg-[#2E4C6B] dark:hover:bg-[#375A7F] text-white dark:text-[#F4F7F8] border border-[#243B53] dark:border-[#496F96] shadow-xs'
               : 'bg-[#EDF1F5] hover:bg-[#DFE6EE] dark:bg-[#1E2630] dark:hover:bg-[#26313E] text-[#243B53] dark:text-[#9CC3E6] border border-[#C9D5E2] dark:border-[#334354]'
@@ -202,7 +202,7 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
       </div>
 
       {/* Secondary Speech Study Controls: Sequential US -> UK Comparison & Cadence Speed */}
-      <div className="flex flex-wrap items-center justify-center gap-2">
+      <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
         <button
           type="button"
           data-testid="card-audio-compare"
@@ -217,7 +217,7 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
             void triggerTap();
             void compareUsAndUkSpeech(term, term, { speed });
           }}
-          className={`min-h-[44px] lg:min-h-[34px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#28665E] ${
+          className={`min-h-[36px] lg:min-h-[34px] inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#28665E] ${
             isComparingTerm
               ? 'bg-[#1C1B18] dark:bg-[#EBE7DE] text-[#F6F4EF] dark:text-[#181A18] font-semibold'
               : 'bg-[#F3F1EC] hover:bg-[#E7E3DA] dark:bg-[#282C28] dark:hover:bg-[#313631] text-[#4A463F] dark:text-[#C5C0B5] border border-[#E2DDD3] dark:border-[#343A34]'
@@ -247,7 +247,7 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
           }
           title="Alternar velocidade da voz entre Normal (1x) e Lenta didática (0.7x) (Atalho S)"
           onClick={handleToggleSpeed}
-          className={`min-h-[44px] lg:min-h-[34px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#28665E] ${
+          className={`min-h-[36px] lg:min-h-[34px] inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#28665E] ${
             isSlow
               ? 'bg-[#FDF5E8] hover:bg-[#FAEBCE] dark:bg-[#2F261A] dark:hover:bg-[#392E1F] text-[#9A5B13] dark:text-[#E6B472] border border-[#E5C9A3] dark:border-[#574328] font-semibold'
               : 'bg-[#F3F1EC] hover:bg-[#E7E3DA] dark:bg-[#282C28] dark:hover:bg-[#313631] text-[#4A463F] dark:text-[#C5C0B5] border border-[#E2DDD3] dark:border-[#343A34]'
@@ -394,8 +394,8 @@ export const SentenceAudioButtons = memo(function SentenceAudioButtons({
   const playingUk = isPlayingAccent('uk');
   const suffix = faceLabel ? ` (${faceLabel})` : '';
   const sizeClasses = compact
-    ? 'min-h-[36px] lg:min-h-[28px] px-2.5 py-0.5 rounded-md text-[10px]'
-    : 'min-h-[42px] lg:min-h-[32px] px-3 py-1 rounded-lg text-[11px]';
+    ? 'min-h-[32px] lg:min-h-[28px] px-2 sm:px-2.5 py-0.5 rounded-md text-[10px]'
+    : 'min-h-[34px] sm:min-h-[40px] lg:min-h-[32px] px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-lg text-[10.5px] sm:text-[11px]';
 
   return (
     <div

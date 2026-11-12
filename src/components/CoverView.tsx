@@ -23,7 +23,7 @@ import {
 } from '../utils/coverHelpers';
 import { TopStudentsCoverPodium } from './TopStudentsCoverPodium';
 import { PWAInstallButton } from './PWAInstallButton';
-import type { UserStudyStats } from '../utils/studyMetrics';
+import type { CloudLeaderboardRecord, UserStudyStats } from '../utils/studyMetrics';
 
 const TEACHER_MARIANA_PORTRAIT_SRC = `${import.meta.env.BASE_URL}assets/aistudio/WhatsApp_Image_2026-11-08_at_14.38.24_7c01daed.jpeg`;
 
@@ -77,6 +77,9 @@ interface CoverViewProps {
   syncLabel: string;
   userDisplayName: string | null;
   userEmail: string | null;
+  currentUid?: string | null;
+  quizScore?: number;
+  cloudLeaderboard?: CloudLeaderboardRecord[];
   isAdmin: boolean;
   isSigningIn: boolean;
   stats: UserStudyStats;
@@ -103,6 +106,9 @@ export const CoverView = memo(function CoverView({
   syncLabel,
   userDisplayName,
   userEmail,
+  currentUid,
+  quizScore = 0,
+  cloudLeaderboard,
   isAdmin,
   isSigningIn,
   stats,
@@ -216,7 +222,14 @@ export const CoverView = memo(function CoverView({
             <TopStudentsCoverPodium
               stats={stats}
               userDisplayName={userDisplayName}
+              userEmail={userEmail}
+              currentUid={currentUid}
+              masteredCount={masteredCount}
+              reviewCount={reviewCount}
+              quizScore={quizScore}
+              cloudLeaderboard={cloudLeaderboard}
               onOpenRankingModal={onOpenRankingModal}
+              onStartFirstPractice={() => onEnterApp('study')}
             />
 
             {!nativeApp && (
@@ -225,7 +238,7 @@ export const CoverView = memo(function CoverView({
                 onClick={onOpenDownloadModal}
                 title="Baixar aplicativo EWM no celular (QR Code, APK Android ou iPhone)"
                 aria-label="Baixar aplicativo EWM no celular"
-                className="min-h-[48px] lg:min-h-[43px] inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 rounded-xl border border-[#28665E]/45 dark:border-[#68B4A8]/50 bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#26403C] text-[#1E4E47] dark:text-[#86CEC2] text-xs sm:text-sm font-semibold shadow-2xs transition-all duration-200 cursor-pointer select-none shrink-0"
+                className="min-h-[44px] lg:min-h-[43px] inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 rounded-xl border border-[#28665E]/45 dark:border-[#68B4A8]/50 bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#26403C] text-[#1E4E47] dark:text-[#86CEC2] text-xs sm:text-sm font-semibold shadow-2xs transition-all duration-200 cursor-pointer select-none shrink-0"
               >
                 <Download className="w-4 h-4 shrink-0" />
                 <span className="hidden sm:inline">Download</span>
@@ -240,9 +253,12 @@ export const CoverView = memo(function CoverView({
                   ? 'Ir para os flashcards e continuar rodada'
                   : 'Começar a praticar o acervo de flashcards'
               }
-              className="w-36 sm:w-40 min-h-[48px] lg:min-h-[43px] inline-flex items-center justify-center gap-2 px-3 rounded-xl bg-[#28665E] hover:bg-[#1F524B] active:bg-[#1A453F] dark:bg-[#2A6D63] dark:hover:bg-[#327D72] dark:active:bg-[#235C53] text-white dark:text-[#F4F7F6] text-xs sm:text-sm font-semibold shadow-xs transition-all duration-200 cursor-pointer select-none group shrink-0"
+              className="sm:w-40 min-h-[44px] lg:min-h-[43px] inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 rounded-xl bg-[#28665E] hover:bg-[#1F524B] active:bg-[#1A453F] dark:bg-[#2A6D63] dark:hover:bg-[#327D72] dark:active:bg-[#235C53] text-white dark:text-[#F4F7F6] text-xs sm:text-sm font-semibold shadow-xs transition-all duration-200 cursor-pointer select-none group shrink-0"
             >
-              <span className="truncate">{isLoggedIn ? 'Ir para os Cards' : 'Praticar agora'}</span>
+              <span className="truncate">{isLoggedIn ? 'Cards' : 'Praticar'}</span>
+              <span className="hidden sm:inline truncate">
+                {isLoggedIn ? ' · Estudar' : ' agora'}
+              </span>
               <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white/90 dark:text-[#F4F7F6]/90 transition-transform duration-200 group-hover:translate-x-0.5 shrink-0" />
             </button>
           </div>
@@ -793,6 +809,14 @@ export const CoverView = memo(function CoverView({
             >
               Guia Fonético
             </button>
+            <a
+              href={`${import.meta.env.BASE_URL}privacy.html`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] transition-colors"
+            >
+              Privacidade (LGPD)
+            </a>
             <PWAInstallButton onOpenDownloadModal={onOpenDownloadModal} />
           </div>
         </div>

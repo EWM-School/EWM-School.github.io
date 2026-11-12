@@ -388,6 +388,18 @@ export function AuthAccountModal({
                 </div>
               )}
             </form>
+
+            <p className="text-[11px] text-center text-[#787368] dark:text-[#9E998F] pt-1">
+              Protegido pela LGPD ·{' '}
+              <a
+                href={`${import.meta.env.BASE_URL}privacy.html`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-[#28665E] dark:hover:text-[#86CEC2]"
+              >
+                Política de Privacidade e Exclusão de Dados
+              </a>
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
