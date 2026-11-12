@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState, type TouchEvent } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -27,7 +27,8 @@ import {
   toggleSpeakEnglishText,
   type ActiveAudioPlayback,
   type SpeechSpeed,
-} from '../utils/speech';
+} from '../services/platform/speechService';
+import { triggerTap } from '../services/platform/hapticsService';
 import {
   AudioWaveIcon,
   BackFaceTermAudioControls,
@@ -63,7 +64,7 @@ interface StudyViewProps {
   onResetFilters: () => void;
 }
 
-export function StudyView({
+export const StudyView = memo(function StudyView({
   cards,
   currentIndex,
   isFlipped,
@@ -90,6 +91,8 @@ export function StudyView({
 }: StudyViewProps) {
   const [activeAudio, setActiveAudio] = useState<ActiveAudioPlayback | null>(null);
   const [speechSpeed, setSpeechSpeed] = useState<SpeechSpeed>(() => getSpeechSpeed());
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const swipeConsumedRef = useRef(false);
 
   useEffect(() => {
     const unsubAudio = subscribeAudioPlayback(setActiveAudio);
@@ -124,6 +127,41 @@ export function StudyView({
     );
   };
 
+  const handleTouchStart = (e: TouchEvent<HTMLElement>) => {
+    const t = e.touches[0];
+    if (!t) return;
+    swipeConsumedRef.current = false;
+    touchStartRef.current = { x: t.clientX, y: t.clientY };
+  };
+
+  const handleTouchEnd = (e: TouchEvent<HTMLElement>) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!start) return;
+    const t = e.changedTouches[0];
+    if (!t) return;
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+
+    if (Math.abs(dx) >= 58 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+      swipeConsumedRef.current = true;
+      void triggerTap();
+      if (dx < 0) {
+        onNext();
+      } else {
+        onPrev();
+      }
+    }
+  };
+
+  const handleCardClick = () => {
+    if (swipeConsumedRef.current) {
+      swipeConsumedRef.current = false;
+      return;
+    }
+    onToggleFlip();
+  };
+
   return (
     <div className="space-y-4">
       {/* Study Mode Context Strip */}
@@ -133,7 +171,7 @@ export function StudyView({
             <button
               type="button"
               onClick={() => onChangeScope('selected')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              className={`min-h-[42px] lg:min-h-[30px] px-3 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 studyScope === 'selected'
                   ? 'bg-white dark:bg-[#2C312C] text-[#1C1B18] dark:text-[#EBE7DE] shadow-xs'
                   : 'text-[#5C574E] dark:text-[#AFAAA0]'
@@ -146,7 +184,7 @@ export function StudyView({
             <button
               type="button"
               onClick={() => onChangeScope('decks')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              className={`min-h-[42px] lg:min-h-[30px] px-3 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 studyScope === 'decks'
                   ? 'bg-white dark:bg-[#2C312C] text-[#1C1B18] dark:text-[#EBE7DE] shadow-xs'
                   : 'text-[#5C574E] dark:text-[#AFAAA0]'
@@ -159,7 +197,7 @@ export function StudyView({
             <button
               type="button"
               onClick={() => onChangeScope('all')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              className={`min-h-[42px] lg:min-h-[30px] px-3 py-1 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 studyScope === 'all'
                   ? 'bg-white dark:bg-[#2C312C] text-[#1C1B18] dark:text-[#EBE7DE] shadow-xs'
                   : 'text-[#5C574E] dark:text-[#AFAAA0]'
@@ -175,7 +213,7 @@ export function StudyView({
               <button
                 type="button"
                 onClick={() => onQuickRandomSelection(10)}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] hover:bg-[#EAE6DD] dark:hover:bg-[#242824] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="min-h-[44px] lg:min-h-[32px] inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] hover:bg-[#EAE6DD] dark:hover:bg-[#242824] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                 title="Sortear 10 novos cards para estudo"
               >
                 <Shuffle className="w-3.5 h-3.5" />
@@ -184,7 +222,7 @@ export function StudyView({
               <button
                 type="button"
                 onClick={onGoToList}
-                className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#28665E] dark:text-[#68B4A8] hover:bg-[#EAF3F1] dark:hover:bg-[#1E312E] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="hidden sm:inline-flex min-h-[44px] lg:min-h-[32px] items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#28665E] dark:text-[#68B4A8] hover:bg-[#EAF3F1] dark:hover:bg-[#1E312E] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <ListChecks className="w-3.5 h-3.5" />
                 <span>Personalizar seleção</span>
@@ -196,7 +234,7 @@ export function StudyView({
             <button
               type="button"
               onClick={onGoToDecks}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#28665E] dark:text-[#68B4A8] hover:bg-[#EAF3F1] dark:hover:bg-[#1E312E] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              className="min-h-[44px] lg:min-h-[32px] inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#28665E] dark:text-[#68B4A8] hover:bg-[#EAF3F1] dark:hover:bg-[#1E312E] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
               <Link2 className="w-3.5 h-3.5" />
               <span>Configurar baralhos conectados</span>
@@ -214,7 +252,7 @@ export function StudyView({
             <button
               type="button"
               onClick={onToggleFocusMode}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] text-xs font-semibold text-[#1C1B18] dark:text-[#EBE7DE] shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
+              className="min-h-[48px] lg:min-h-[36px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] text-xs font-semibold text-[#1C1B18] dark:text-[#EBE7DE] shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
             >
               <Minimize2 className="w-3.5 h-3.5" />
               <span>Sair do Foco</span>
@@ -269,7 +307,7 @@ export function StudyView({
               <button
                 type="button"
                 onClick={onGoToDecks}
-                className="px-4 py-2 rounded-xl bg-[#28665E] hover:bg-[#1F524B] text-white dark:bg-[#2A6D63] dark:hover:bg-[#327D72] dark:text-[#F4F7F6] text-xs font-semibold cursor-pointer"
+                className="min-h-[48px] px-5 py-2.5 rounded-xl bg-[#28665E] hover:bg-[#1F524B] text-white dark:bg-[#2A6D63] dark:hover:bg-[#327D72] dark:text-[#F4F7F6] text-xs font-semibold cursor-pointer"
               >
                 Ir para Meus Baralhos
               </button>
@@ -278,14 +316,14 @@ export function StudyView({
                 <button
                   type="button"
                   onClick={onResetFilters}
-                  className="px-4 py-2 rounded-xl bg-[#28665E] hover:bg-[#1F524B] text-white dark:bg-[#2A6D63] dark:hover:bg-[#327D72] dark:text-[#F4F7F6] text-xs font-semibold cursor-pointer"
+                  className="min-h-[48px] px-5 py-2.5 rounded-xl bg-[#28665E] hover:bg-[#1F524B] text-white dark:bg-[#2A6D63] dark:hover:bg-[#327D72] dark:text-[#F4F7F6] text-xs font-semibold cursor-pointer"
                 >
                   Limpar filtros
                 </button>
                 <button
                   type="button"
                   onClick={() => onQuickRandomSelection(10)}
-                  className="px-4 py-2 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-xs font-semibold text-[#1C1B18] dark:text-[#EBE7DE] cursor-pointer"
+                  className="min-h-[48px] px-5 py-2.5 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-xs font-semibold text-[#1C1B18] dark:text-[#EBE7DE] cursor-pointer"
                 >
                   Sortear 10 cards
                 </button>
@@ -295,10 +333,12 @@ export function StudyView({
         </div>
       ) : (
         <div className="max-w-3xl mx-auto space-y-4 sm:space-y-5">
-          {/* 3D Animated Flashcard Stage */}
+          {/* 3D Animated Flashcard Stage with Fluid Horizontal Swipe Gestures */}
           <div key={currentCard.id} className="flashcard-perspective animate-card-enter">
             <article
-              onClick={onToggleFlip}
+              onClick={handleCardClick}
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
               aria-label={`Flashcard ${currentCard.term}`}
               className={`flashcard-inner cursor-pointer select-none ${
                 isFlipped ? 'is-flipped' : ''
@@ -310,7 +350,7 @@ export function StudyView({
                   isFlipped ? 'pointer-events-none' : ''
                 }`}
               >
-                {/* Top Metadata + Actions (Zero-Pill Typography) */}
+                {/* Top Metadata + Actions */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-[#6B655C] dark:text-[#AFAAA0]">
                     <span className="text-[#28665E] dark:text-[#68B4A8] font-semibold">
@@ -353,7 +393,7 @@ export function StudyView({
                       onClick={() => onEditCard(currentCard)}
                       aria-label="Editar card"
                       title="Editar card"
-                      className="p-2 rounded-xl text-[#787267] dark:text-[#AFAAA0] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] hover:bg-[#F0EDE6] dark:hover:bg-[#292D29] transition-colors cursor-pointer"
+                      className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] inline-flex items-center justify-center rounded-xl text-[#787267] dark:text-[#AFAAA0] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] hover:bg-[#F0EDE6] dark:hover:bg-[#292D29] transition-colors cursor-pointer"
                     >
                       <Edit3 className="w-4 h-4" />
                     </button>
@@ -362,14 +402,14 @@ export function StudyView({
                       onClick={() => onDeleteCard(currentCard)}
                       aria-label="Excluir card"
                       title="Excluir card"
-                      className="p-2 rounded-xl text-[#787267] dark:text-[#AFAAA0] hover:text-[#B5443C] dark:hover:text-[#E58982] hover:bg-[#FDF2F2] dark:hover:bg-[#322120] transition-colors cursor-pointer"
+                      className="min-w-[44px] min-h-[44px] lg:min-w-[36px] lg:min-h-[36px] inline-flex items-center justify-center rounded-xl text-[#787267] dark:text-[#AFAAA0] hover:text-[#B5443C] dark:hover:text-[#E58982] hover:bg-[#FDF2F2] dark:hover:bg-[#322120] transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
 
-                {/* Center Hero Term + Dual US/UK Phonetics + Dual Native Web Speech Audio Controls */}
+                {/* Center Hero Term + Dual US/UK Phonetics + Dual Hybrid Speech Audio Controls */}
                 <div className="my-5 text-center space-y-3.5">
                   <h2
                     style={{ textWrap: 'balance' }}
@@ -429,16 +469,21 @@ export function StudyView({
                     e.stopPropagation();
                     onToggleFlip();
                   }}
-                  className="mt-4 mx-auto text-center text-[11px] text-[#857F74] dark:text-[#8A857C] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  className="mt-4 mx-auto min-h-[36px] text-center text-[11px] text-[#857F74] dark:text-[#8A857C] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <RotateCw className="w-3 h-3" />
-                  <span>Clique no card ou pressione Espaço para ver a tradução real</span>
+                  <span className="sm:hidden">
+                    Toque para virar ou deslize para os lados
+                  </span>
+                  <span className="hidden sm:inline">
+                    Clique no card ou pressione Espaço para ver a tradução real
+                  </span>
                 </button>
               </div>
 
               {/* BACK FACE */}
               <div
-                className={`flashcard-face flashcard-face-back absolute inset-0 rounded-3xl border border-[#D4DFDC] dark:border-[#314440] bg-[#FCFBF8] dark:bg-[#232723] shadow-[0_10px_30px_-14px_rgba(28,27,24,0.12)] dark:shadow-[0_14px_34px_-14px_rgba(0,0,0,0.45)] p-6 sm:p-8 flex flex-col justify-between overflow-y-auto ${
+                className={`flashcard-face flashcard-face-back absolute inset-0 rounded-3xl border border-[#D4DFDC] dark:border-[#314440] bg-[#FCFBF8] dark:bg-[#232723] shadow-[0_10px_30px_-14px_rgba(28,27,24,0.12)] dark:shadow-[0_14px_34px_-14px_rgba(0,0,0,0.45)] p-5 sm:p-8 flex flex-col justify-between overflow-y-auto ${
                   !isFlipped ? 'pointer-events-none' : ''
                 }`}
               >
@@ -487,7 +532,7 @@ export function StudyView({
                     </div>
                   </div>
 
-                  {/* Translated Examples (also with US & UK audio buttons on the back face) */}
+                  {/* Translated Examples */}
                   <div
                     className="space-y-2 pt-2.5 border-t border-[#ECE9E1] dark:border-[#2D332D]"
                     onClick={(e) => e.stopPropagation()}
@@ -549,7 +594,7 @@ export function StudyView({
                               speed: speechSpeed,
                             })
                           }
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#243B53] hover:bg-[#1B2D40] text-white dark:bg-[#2E4C6B] dark:hover:bg-[#375A7F] dark:text-[#F4F7F8] text-[11px] font-semibold whitespace-nowrap shrink-0 cursor-pointer"
+                          className="min-h-[38px] lg:min-h-[30px] inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#243B53] hover:bg-[#1B2D40] text-white dark:bg-[#2E4C6B] dark:hover:bg-[#375A7F] dark:text-[#F4F7F8] text-[11px] font-semibold whitespace-nowrap shrink-0 cursor-pointer"
                         >
                           {isPlaying(phonetics.ukVariantTerm, 'uk') ? (
                             <AudioWaveIcon className="w-3 h-3" />
@@ -581,33 +626,36 @@ export function StudyView({
                     e.stopPropagation();
                     onToggleFlip();
                   }}
-                  className="mt-3 mx-auto text-center text-[11px] text-[#857F74] dark:text-[#8A857C] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  className="mt-3 mx-auto min-h-[36px] text-center text-[11px] text-[#857F74] dark:text-[#8A857C] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <RotateCw className="w-3 h-3" />
-                  <span>Clique para voltar à frente</span>
+                  <span>Toque para voltar à frente</span>
                 </button>
               </div>
             </article>
           </div>
 
-          {/* Bottom Decision & Navigation Controls */}
-          <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
+          {/* Bottom Decision & Navigation Controls — >= 48px Touch Targets on Mobile */}
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center justify-between gap-2.5 pt-1 select-none">
             <button
               type="button"
-              onClick={onPrev}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] text-xs font-semibold text-[#5C574E] dark:text-[#D8D4CA] hover:text-[#1C1B18] dark:hover:text-[#F4F7F6] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              onClick={() => {
+                void triggerTap();
+                onPrev();
+              }}
+              className="order-3 sm:order-1 min-h-[48px] inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] text-xs font-semibold text-[#5C574E] dark:text-[#D8D4CA] hover:text-[#1C1B18] dark:hover:text-[#F4F7F6] transition-colors whitespace-nowrap shrink-0 cursor-pointer active:scale-[0.98]"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Anterior</span>
             </button>
 
-            <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-center">
+            <div className="order-1 sm:order-2 col-span-2 grid grid-cols-2 sm:flex items-center gap-2 sm:flex-initial justify-center">
               <button
                 type="button"
                 onClick={() => onMarkStatus('review')}
-                className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-[#E5C9A3] dark:border-[#574328] bg-[#FDF5E8] hover:bg-[#FAEBCE] dark:bg-[#2B2318] dark:hover:bg-[#352B1D] text-[#9A5B13] dark:text-[#E6B472] text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="min-h-[48px] inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-[#E5C9A3] dark:border-[#574328] bg-[#FDF5E8] hover:bg-[#FAEBCE] dark:bg-[#2B2318] dark:hover:bg-[#352B1D] text-[#9A5B13] dark:text-[#E6B472] text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer active:scale-[0.98]"
               >
-                <Clock className="w-4 h-4" />
+                <Clock className="w-4 h-4 shrink-0" />
                 <span>Revisar depois</span>
                 <span className="hidden md:inline font-mono-num text-[10px] opacity-65 ml-1">
                   [1]
@@ -617,9 +665,9 @@ export function StudyView({
               <button
                 type="button"
                 onClick={() => onMarkStatus('mastered')}
-                className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#28665E] hover:bg-[#1F524B] dark:bg-[#2A6D63] dark:hover:bg-[#327D72] text-white dark:text-[#F4F7F6] text-xs font-semibold shadow-xs transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="min-h-[48px] inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#28665E] hover:bg-[#1F524B] dark:bg-[#2A6D63] dark:hover:bg-[#327D72] text-white dark:text-[#F4F7F6] text-xs font-semibold shadow-xs transition-colors whitespace-nowrap shrink-0 cursor-pointer active:scale-[0.98]"
               >
-                <Check className="w-4 h-4" />
+                <Check className="w-4 h-4 shrink-0" />
                 <span>Já dominei!</span>
                 <span className="hidden md:inline font-mono-num text-[10px] opacity-75 ml-1">
                   [2]
@@ -629,8 +677,11 @@ export function StudyView({
 
             <button
               type="button"
-              onClick={onNext}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] text-xs font-semibold text-[#5C574E] dark:text-[#D8D4CA] hover:text-[#1C1B18] dark:hover:text-[#F4F7F6] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              onClick={() => {
+                void triggerTap();
+                onNext();
+              }}
+              className="order-4 sm:order-3 min-h-[48px] inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] text-xs font-semibold text-[#5C574E] dark:text-[#D8D4CA] hover:text-[#1C1B18] dark:hover:text-[#F4F7F6] transition-colors whitespace-nowrap shrink-0 cursor-pointer active:scale-[0.98]"
             >
               <span>Próximo</span>
               <ArrowRight className="w-4 h-4" />
@@ -640,4 +691,4 @@ export function StudyView({
       )}
     </div>
   );
-}
+});

@@ -56,7 +56,7 @@ export function PWAInstallButton() {
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
                 <img
-                  src="/assets/aistudio/WhatsApp_Image_2026-11-07_at_17.55.16_2916485b.jpeg"
+                  src={`${import.meta.env.BASE_URL}assets/aistudio/WhatsApp_Image_2026-11-07_at_17.55.16_2916485b.jpeg`}
                   alt="Ícone oficial EWM Keep practicing"
                   className="w-12 h-12 rounded-2xl object-contain bg-white p-1 border border-[#E4E0D8] dark:border-[#343A34] shrink-0 shadow-2xs"
                 />

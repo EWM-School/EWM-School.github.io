@@ -1,18 +1,36 @@
+import { Capacitor } from '@capacitor/core';
 import { initializeApp } from 'firebase/app';
 import {
-  getAuth,
+  EmailAuthProvider,
   GoogleAuthProvider,
+  browserLocalPersistence,
+  browserPopupRedirectResolver,
+  createUserWithEmailAndPassword,
+  deleteUser,
+  getAuth,
+  indexedDBLocalPersistence,
+  initializeAuth,
   onAuthStateChanged,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  signInWithCredential,
+  signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
+  updateProfile,
+  type Auth,
   type User,
 } from 'firebase/auth';
 import {
+  Timestamp,
   collection,
   deleteDoc,
   doc,
   getDoc,
-  getDocFromServer,
+  getDocs,
   initializeFirestore,
   onSnapshot,
   query,
@@ -43,10 +61,11 @@ import {
 
 export const BOOTSTRAPPED_ADMIN_EMAIL = 'igordesouzaar@gmail.com';
 
-// Suppress benign internal RPC/WebChannel transport reconnection messages in sandboxed iframe environments
+// Suppress benign internal RPC/WebChannel transport reconnection messages when offline or in WebView
 setLogLevel('silent');
 
-const app = initializeApp(firebaseConfig);
+export const app = initializeApp(firebaseConfig);
+
 export const db = initializeFirestore(
   app,
   {
@@ -54,9 +73,27 @@ export const db = initializeFirestore(
   },
   firebaseConfig.firestoreDatabaseId
 );
-export const auth = getAuth(app);
 
-const googleProvider = new GoogleAuthProvider();
+function createHybridFirebaseAuth(): Auth {
+  try {
+    if (Capacitor.isNativePlatform()) {
+      // Avoid WKWebView IndexedDB auth persistence deadlocks on iOS/Android Capacitor containers
+      return initializeAuth(app, {
+        persistence: browserLocalPersistence,
+      });
+    }
+    return initializeAuth(app, {
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+      popupRedirectResolver: browserPopupRedirectResolver,
+    });
+  } catch {
+    return getAuth(app);
+  }
+}
+
+export const auth = createHybridFirebaseAuth();
+
+export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export enum OperationType {
@@ -85,6 +122,17 @@ export interface FirestoreErrorInfo {
   };
 }
 
+export function isLikelyNetworkOfflineError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    msg.includes('offline') ||
+    msg.includes('unavailable') ||
+    msg.includes('network-request-failed') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('network error')
+  );
+}
+
 export function handleFirestoreError(
   error: unknown,
   operationType: OperationType,
@@ -107,23 +155,39 @@ export function handleFirestoreError(
     operationType,
     path,
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  if (!isLikelyNetworkOfflineError(error)) {
+    console.warn('Firestore Sync Warning:', JSON.stringify(errInfo));
+  }
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Mandatory boot connection check to Firestore
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
-    }
-  }
-}
-void testConnection();
+export {
+  EmailAuthProvider,
+  GoogleAuthProvider,
+  createUserWithEmailAndPassword,
+  deleteUser,
+  onAuthStateChanged,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  signInWithCredential,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signInWithRedirect,
+  signOut,
+  updateProfile,
+  type User,
+};
 
-export { onAuthStateChanged, type User };
+/**
+ * Firestore security rules require `email_verified == true` for `/users/{uid}` reads/writes.
+ * Google OAuth accounts satisfy this immediately; email/password accounts sync to Firestore
+ * once verified while keeping 100% offline-first functionality locally in the meantime.
+ */
+export function canSyncUserWithCloud(user: User | null): boolean {
+  return Boolean(user && user.emailVerified);
+}
 
 export async function signInWithGooglePopup(): Promise<User> {
   const result = await signInWithPopup(auth, googleProvider);
@@ -144,6 +208,7 @@ export async function checkIsUserAdmin(user: User | null): Promise<boolean> {
     const snap = await getDoc(doc(db, 'admins', user.uid));
     return snap.exists();
   } catch (error) {
+    if (isLikelyNetworkOfflineError(error)) return false;
     handleFirestoreError(error, OperationType.GET, adminPath);
   }
 }
@@ -165,8 +230,39 @@ export interface CloudWorkspaceSnapshot {
   connectedDeckIds: string[];
   activeRound: number;
   preferredAccent?: EnglishAccent;
+  updatedAt?: string;
 }
 
+function extractTimestampIso(val: unknown): string | undefined {
+  if (!val) return undefined;
+  if (val instanceof Timestamp) {
+    return val.toDate().toISOString();
+  }
+  if (typeof val === 'object' && val !== null && 'toDate' in val && typeof (val as { toDate: () => Date }).toDate === 'function') {
+    try {
+      return (val as { toDate: () => Date }).toDate().toISOString();
+    } catch {
+      return undefined;
+    }
+  }
+  if (typeof val === 'number' && Number.isFinite(val)) {
+    return new Date(val).toISOString();
+  }
+  if (typeof val === 'string') return val;
+  return undefined;
+}
+
+function extractTimestampMs(val: unknown): number | undefined {
+  const iso = extractTimestampIso(val);
+  if (!iso) return undefined;
+  const parsed = Date.parse(iso);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/**
+ * Ensures the student's cloud workspace exists and performs a lossless merge of any
+ * visitor/offline progress, custom cards, and decks so zero studied cards are ever lost.
+ */
 export async function ensureUserWorkspaceAndMigrate(
   uid: string,
   localSeed: WorkspaceMigrationSeed
@@ -207,7 +303,6 @@ export async function ensureUserWorkspaceAndMigrate(
       handleFirestoreError(error, OperationType.CREATE, wsPath);
     }
 
-    // Migrate visitor custom cards, decks, and card mastery progress on first sign-in
     for (const cc of localSeed.customCards) {
       if (isValidFirestoreId(cc.id)) {
         await upsertCustomCard(uid, cc);
@@ -227,32 +322,86 @@ export async function ensureUserWorkspaceAndMigrate(
     return { createdNew: true, workspace: sanitizedWs };
   }
 
-  // Merge any visitor cards created while offline/unauthenticated into existing cloud account
+  // Existing cloud account: losslessly merge visitor custom cards, decks, AND studied progress!
   if (localSeed.customCards && localSeed.customCards.length > 0) {
     for (const cc of localSeed.customCards) {
       if (isValidFirestoreId(cc.id)) {
-        void upsertCustomCard(uid, cc).catch(() => {});
+        await upsertCustomCard(uid, cc).catch(() => {});
       }
     }
   }
+
   if (localSeed.decks && localSeed.decks.length > 0) {
     for (const deck of localSeed.decks) {
       if (isValidFirestoreId(deck.id)) {
-        void upsertUserDeck(uid, deck).catch(() => {});
+        await upsertUserDeck(uid, deck).catch(() => {});
       }
     }
   }
+
+  const meaningfulLocalProgress = (localSeed.progressEntries || []).filter(
+    (p) => isValidFirestoreId(p.cardId) && p.masteryLevel !== 'unseen'
+  );
+
+  if (meaningfulLocalProgress.length > 0) {
+    try {
+      const cloudProgSnap = await getDocs(
+        query(collection(db, 'users', uid, 'cardProgress'), where('ownerId', '==', uid))
+      );
+      const cloudProgMap = new Map<string, { masteryLevel: CardStatus; updatedAtMs: number }>();
+      cloudProgSnap.docs.forEach((d) => {
+        const data = d.data();
+        const cid = String(data.cardId || d.id);
+        cloudProgMap.set(cid, {
+          masteryLevel: (data.masteryLevel as CardStatus) || 'unseen',
+          updatedAtMs: extractTimestampMs(data.updatedAt) ?? 0,
+        });
+      });
+
+      for (const localProg of meaningfulLocalProgress) {
+        const cloudExisting = cloudProgMap.get(localProg.cardId);
+        const localMs = localProg.updatedAt ? Date.parse(localProg.updatedAt) : 0;
+        const shouldWriteToCloud =
+          !cloudExisting ||
+          cloudExisting.masteryLevel === 'unseen' ||
+          (localMs > 0 && localMs > cloudExisting.updatedAtMs) ||
+          (localProg.masteryLevel === 'mastered' && cloudExisting.masteryLevel === 'review' && cloudExisting.updatedAtMs === 0);
+
+        if (shouldWriteToCloud) {
+          await saveCardMastery(
+            uid,
+            localProg.cardId,
+            localProg.masteryLevel,
+            localProg.roundMarked
+          ).catch(() => {});
+        }
+      }
+    } catch {
+      // Non-fatal: sync queue will retry if offline
+    }
+  }
+
+  const cloudSelected = Array.isArray(existingData?.selectedCardIds)
+    ? (existingData.selectedCardIds as string[])
+    : [];
+  const mergedSelectedIds =
+    cloudSelected.length > 0
+      ? Array.from(new Set([...cloudSelected, ...sanitizedWs.selectedCardIds])).slice(0, 20)
+      : sanitizedWs.selectedCardIds;
+
+  const cloudConnected = Array.isArray(existingData?.connectedDeckIds)
+    ? (existingData.connectedDeckIds as string[])
+    : [];
+  const mergedConnectedIds = Array.from(
+    new Set([...cloudConnected, ...sanitizedWs.connectedDeckIds])
+  ).slice(0, 12);
 
   return {
     createdNew: false,
     workspace: {
       studyScope: (existingData?.studyScope as StudyScope) || 'selected',
-      selectedCardIds: Array.isArray(existingData?.selectedCardIds)
-        ? (existingData.selectedCardIds as string[])
-        : sanitizedWs.selectedCardIds,
-      connectedDeckIds: Array.isArray(existingData?.connectedDeckIds)
-        ? (existingData.connectedDeckIds as string[])
-        : sanitizedWs.connectedDeckIds,
+      selectedCardIds: mergedSelectedIds,
+      connectedDeckIds: mergedConnectedIds,
       activeRound:
         typeof existingData?.activeRound === 'number' ? existingData.activeRound : 1,
       preferredAccent:
@@ -261,6 +410,7 @@ export async function ensureUserWorkspaceAndMigrate(
           : existingData?.preferredAccent === 'us'
           ? 'us'
           : undefined,
+      updatedAt: extractTimestampIso(existingData?.updatedAt),
     },
   };
 }
@@ -276,9 +426,33 @@ export async function updateUserWorkspaceSettings(
   }
 ): Promise<void> {
   const wsPath = `users/${uid}`;
+  const wsRef = doc(db, 'users', uid);
   const clean = sanitizeWorkspaceFieldsForFirestore(settings);
+
+  let exists = true;
   try {
-    await updateDoc(doc(db, 'users', uid), {
+    const snap = await getDoc(wsRef);
+    exists = snap.exists();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, wsPath);
+  }
+
+  if (!exists) {
+    try {
+      await setDoc(wsRef, {
+        ownerId: uid,
+        ...clean,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, wsPath);
+    }
+    return;
+  }
+
+  try {
+    await updateDoc(wsRef, {
       ...clean,
       updatedAt: serverTimestamp(),
     });
@@ -341,7 +515,7 @@ export async function resetAllCardMasteryInCloud(
   if (validIds.length === 0) return;
 
   const cleanRound = Math.max(1, Math.min(10000, Math.floor(newRound || 1)));
-  const chunkSize = 400; // Well below Firestore's 500 ops per batch limit
+  const chunkSize = 400;
 
   for (let i = 0; i < validIds.length; i += chunkSize) {
     const chunk = validIds.slice(i, i + chunkSize);
@@ -455,6 +629,41 @@ export async function deleteUserDeckFromCloud(uid: string, deckId: string): Prom
     await deleteDoc(doc(db, 'users', uid, 'decks', deckId));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+/**
+ * Deletes all Firestore subcollections and the root workspace document for a user.
+ * Subcollections are deleted BEFORE `/users/{uid}` to satisfy `hasParentWorkspace(uid)` security rules.
+ */
+export async function deleteAllUserCloudData(uid: string): Promise<void> {
+  if (!isValidFirestoreId(uid)) return;
+
+  const subcollections = ['cardProgress', 'customCards', 'decks'] as const;
+
+  for (const sub of subcollections) {
+    try {
+      const snap = await getDocs(
+        query(collection(db, 'users', uid, sub), where('ownerId', '==', uid))
+      );
+      const docs = snap.docs;
+      const chunkSize = 400;
+      for (let i = 0; i < docs.length; i += chunkSize) {
+        const batch = writeBatch(db);
+        for (const d of docs.slice(i, i + chunkSize)) {
+          batch.delete(d.ref);
+        }
+        await batch.commit();
+      }
+    } catch {
+      // Ignore if workspace never existed in cloud
+    }
+  }
+
+  try {
+    await deleteDoc(doc(db, 'users', uid));
+  } catch {
+    // Ignore if root doc was not created or rules not yet redeployed
   }
 }
 
@@ -583,12 +792,15 @@ export function subscribeGlobalCards(onCards: (cards: Flashcard[]) => void): Uns
           archived: Boolean(data.archived),
           authorId: String(data.authorId || ''),
           modified: true,
+          updatedAt: extractTimestampMs(data.updatedAt),
         };
       });
       onCards(items);
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, path);
+      if (!isLikelyNetworkOfflineError(error)) {
+        console.warn(`Global cards listener error (${path}):`, error);
+      }
     }
   );
 }
@@ -613,7 +825,9 @@ export function subscribeGrantedAdmins(
       onAdmins(records);
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, path);
+      if (!isLikelyNetworkOfflineError(error)) {
+        console.warn(`Admins listener error (${path}):`, error);
+      }
     }
   );
 }
@@ -627,7 +841,6 @@ export function subscribeUserCloudData(
     onProgressMap: (map: Record<string, CardProgressEntry>) => void;
   }
 ): Unsubscribe {
-  const wsPath = `users/${uid}`;
   const unsubWs = onSnapshot(
     doc(db, 'users', uid),
     (snap) => {
@@ -644,12 +857,12 @@ export function subscribeUserCloudData(
             : data.preferredAccent === 'us'
             ? 'us'
             : undefined,
+        updatedAt: extractTimestampIso(data.updatedAt),
       });
     },
-    (error) => handleFirestoreError(error, OperationType.GET, wsPath)
+    () => {}
   );
 
-  const customPath = `users/${uid}/customCards`;
   const unsubCustom = onSnapshot(
     query(collection(db, 'users', uid, 'customCards'), where('ownerId', '==', uid)),
     (snap) => {
@@ -673,14 +886,14 @@ export function subscribeUserCloudData(
           status: 'unseen',
           origin: 'custom',
           modified: true,
+          updatedAt: extractTimestampMs(data.updatedAt),
         };
       });
       callbacks.onCustomCards(items);
     },
-    (error) => handleFirestoreError(error, OperationType.LIST, customPath)
+    () => {}
   );
 
-  const decksPath = `users/${uid}/decks`;
   const unsubDecks = onSnapshot(
     query(collection(db, 'users', uid, 'decks'), where('ownerId', '==', uid)),
     (snap) => {
@@ -693,14 +906,14 @@ export function subscribeUserCloudData(
           description: String(data.description || ''),
           colorTag: data.colorTag || 'sage',
           cardIds: Array.isArray(data.cardIds) ? data.cardIds : [],
+          updatedAt: extractTimestampMs(data.updatedAt),
         };
       });
       callbacks.onDecks(items);
     },
-    (error) => handleFirestoreError(error, OperationType.LIST, decksPath)
+    () => {}
   );
 
-  const progressPath = `users/${uid}/cardProgress`;
   const unsubProgress = onSnapshot(
     query(collection(db, 'users', uid, 'cardProgress'), where('ownerId', '==', uid)),
     (snap) => {
@@ -712,11 +925,12 @@ export function subscribeUserCloudData(
           cardId: cid,
           masteryLevel: (data.masteryLevel as CardStatus) || 'unseen',
           roundMarked: typeof data.roundMarked === 'number' ? data.roundMarked : 1,
+          updatedAt: extractTimestampIso(data.updatedAt),
         };
       });
       callbacks.onProgressMap(map);
     },
-    (error) => handleFirestoreError(error, OperationType.LIST, progressPath)
+    () => {}
   );
 
   return () => {

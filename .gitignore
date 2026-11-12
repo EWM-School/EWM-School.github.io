@@ -1,8 +1,35 @@
+# Dependencies
 node_modules/
-build/
+
+# Web Build Output
 dist/
+build/
 coverage/
-.DS_Store
-*.log
-.env*
+server.js
+
+# Secrets & Environment Variables (never commit)
+.env
+.env.local
+.env.*
 !.env.example
+
+# Logs & OS Metadata
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Editor / Temp
+.idea/
+*.swp
+
+# Note: android/ and ios/ Capacitor native projects ARE tracked in version control.
+# Transient native build caches are ignored below:
+android/.gradle/
+android/build/
+android/app/build/
+android/capacitor-cordova-android-plugins/build/
+android/local.properties
+ios/App/Pods/
+ios/App/build/
+ios/DerivedData/

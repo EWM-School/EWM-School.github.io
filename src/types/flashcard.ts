@@ -75,6 +75,7 @@ export interface CardProgressEntry {
   cardId: string;
   masteryLevel: CardStatus;
   roundMarked: number;
+  updatedAt?: string;
 }
 
 export interface AdminRecord {

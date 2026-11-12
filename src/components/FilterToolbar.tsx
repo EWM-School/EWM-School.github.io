@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp, Shuffle, SlidersHorizontal, Star } from 'lucide-react';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { VALID_FOLDERS, VALID_SUBTOPICS } from '../data/seedData';
 import type { StatusFilter, SubtopicKey, TopicFolder } from '../types/flashcard';
 
@@ -16,7 +16,7 @@ interface FilterToolbarProps {
   showShuffle?: boolean;
 }
 
-export function FilterToolbar({
+export const FilterToolbar = memo(function FilterToolbar({
   selectedCategory,
   onChangeCategory,
   selectedSubtopic,
@@ -36,14 +36,14 @@ export function FilterToolbar({
     (selectedStatus !== 'all' ? 1 : 0);
 
   return (
-    <section className="rounded-2xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white/80 dark:bg-[#212421]/95 backdrop-blur-xs px-4 py-3 transition-colors">
+    <section className="rounded-2xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white/85 dark:bg-[#212421]/95 backdrop-blur-xs px-3.5 sm:px-4 py-3 transition-colors">
       {/* Top compact bar: Topic quick pills + Status + Toggle details */}
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
             onClick={() => onChangeCategory('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+            className={`min-h-[48px] lg:min-h-[34px] px-3 py-1.5 rounded-xl lg:rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
               selectedCategory === 'all'
                 ? 'bg-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
                 : 'bg-[#F0EDE6] dark:bg-[#292D29] text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE]'
@@ -60,7 +60,7 @@ export function FilterToolbar({
                 key={folder}
                 type="button"
                 onClick={() => onChangeCategory(folder)}
-                className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                className={`min-h-[48px] lg:min-h-[34px] inline-flex items-center gap-1 px-3 py-1.5 rounded-xl lg:rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                   isSelected
                     ? isMari
                       ? 'bg-[#8F5A1C] text-white dark:bg-[#9E6520] dark:text-[#FBF7F0]'
@@ -76,12 +76,12 @@ export function FilterToolbar({
           })}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             aria-label="Filtrar por status de domínio"
             value={selectedStatus}
             onChange={(e) => onChangeStatus(e.target.value as StatusFilter)}
-            className="px-2.5 py-1.5 rounded-lg border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-xs font-medium text-[#1C1B18] dark:text-[#EBE7DE] focus:outline-none focus:ring-2 focus:ring-[#28665E]/30 cursor-pointer"
+            className="min-h-[48px] lg:min-h-[34px] px-2.5 py-1.5 rounded-xl lg:rounded-lg border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-xs font-medium text-[#1C1B18] dark:text-[#EBE7DE] focus:outline-none focus:ring-2 focus:ring-[#28665E]/30 cursor-pointer"
           >
             <option value="all">Todos os status</option>
             <option value="unseen">Não dominados</option>
@@ -94,7 +94,7 @@ export function FilterToolbar({
               type="button"
               onClick={onShuffle}
               title="Embaralhar ordem dos cards"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-xs font-medium text-[#5C574E] dark:text-[#D8D4CA] hover:text-[#1C1B18] dark:hover:text-[#F4F7F6] transition-colors cursor-pointer"
+              className="min-h-[48px] lg:min-h-[34px] inline-flex items-center gap-1.5 px-3 lg:px-2.5 py-1.5 rounded-xl lg:rounded-lg border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-xs font-medium text-[#5C574E] dark:text-[#D8D4CA] hover:text-[#1C1B18] dark:hover:text-[#F4F7F6] transition-colors cursor-pointer"
             >
               <Shuffle className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Embaralhar</span>
@@ -104,7 +104,7 @@ export function FilterToolbar({
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+            className={`min-h-[48px] lg:min-h-[34px] inline-flex items-center gap-1 px-3 lg:px-2.5 py-1.5 rounded-xl lg:rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
               expanded || selectedSubtopic !== 'all'
                 ? 'border-[#28665E]/40 dark:border-[#2F4B46] bg-[#EAF3F1] dark:bg-[#1E312E] text-[#28665E] dark:text-[#86CEC2]'
                 : 'border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-[#5C574E] dark:text-[#AFAAA0]'
@@ -129,7 +129,7 @@ export function FilterToolbar({
           <button
             type="button"
             onClick={() => onChangeSubtopic('all')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+            className={`min-h-[44px] lg:min-h-[30px] px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
               selectedSubtopic === 'all'
                 ? 'bg-[#1C1B18] text-white dark:bg-[#323832] dark:text-[#F4F7F6] dark:border dark:border-[#454D45]'
                 : 'bg-[#F0EDE6] dark:bg-[#292D29] text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE]'
@@ -144,7 +144,7 @@ export function FilterToolbar({
                 key={st.key}
                 type="button"
                 onClick={() => onChangeSubtopic(st.key)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                className={`min-h-[44px] lg:min-h-[30px] px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                   isSelected
                     ? 'bg-[#1C1B18] text-white dark:bg-[#323832] dark:text-[#F4F7F6] dark:border dark:border-[#454D45]'
                     : 'bg-[#F0EDE6] dark:bg-[#292D29] text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE]'
@@ -164,7 +164,7 @@ export function FilterToolbar({
                 onChangeSubtopic('all');
                 onChangeStatus('all');
               }}
-              className="ml-auto text-xs font-medium text-[#28665E] dark:text-[#68B4A8] hover:underline cursor-pointer"
+              className="min-h-[44px] lg:min-h-[30px] px-2 ml-auto text-xs font-medium text-[#28665E] dark:text-[#68B4A8] hover:underline cursor-pointer"
             >
               Limpar filtros
             </button>
@@ -173,4 +173,4 @@ export function FilterToolbar({
       )}
     </section>
   );
-}
+});

@@ -295,6 +295,7 @@ service cloud.firestore {
           )
         )
       );
+      allow delete: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId;
 
       // 3a. Per-Card Progress Subcollection (/users/{userId}/cardProgress/{cardId})
       match /cardProgress/{cardId} {

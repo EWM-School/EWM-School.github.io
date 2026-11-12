@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { ArrowRight, CheckCircle2, RotateCcw, Volume2, XCircle } from 'lucide-react';
 import type { EnglishAccent, QuizOption, QuizQuestion } from '../types/flashcard';
 import { getCardPhonetics } from '../utils/phonetics';
@@ -8,7 +8,8 @@ import {
   subscribeAudioPlayback,
   toggleSpeakEnglishText,
   type ActiveAudioPlayback,
-} from '../utils/speech';
+} from '../services/platform/speechService';
+import { triggerTap } from '../services/platform/hapticsService';
 import { AudioWaveIcon } from './CardAudioControls';
 
 interface QuizViewProps {
@@ -21,7 +22,7 @@ interface QuizViewProps {
   onResetScore: () => void;
 }
 
-export function QuizView({
+export const QuizView = memo(function QuizView({
   question,
   selectedOptionId,
   score,
@@ -64,7 +65,7 @@ export function QuizView({
     activeAudio?.text === cleanEnglishForSpeech(rawText);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5 animate-card-enter">
+    <div className="max-w-2xl mx-auto space-y-5 animate-card-enter select-none">
       {/* Score & Header */}
       <div className="flex items-center justify-between gap-3 px-1">
         <div>
@@ -77,25 +78,28 @@ export function QuizView({
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="px-3 py-1.5 rounded-xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] text-xs font-semibold text-[#1C1B18] dark:text-[#EBE7DE] font-mono-num whitespace-nowrap shrink-0">
+          <div className="min-h-[42px] inline-flex items-center px-3 py-1.5 rounded-xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] text-xs font-semibold text-[#1C1B18] dark:text-[#EBE7DE] font-mono-num whitespace-nowrap shrink-0">
             {score} / {totalAnswered} acertos
           </div>
           {totalAnswered > 0 && (
             <button
               type="button"
-              onClick={onResetScore}
+              onClick={() => {
+                void triggerTap();
+                onResetScore();
+              }}
               title="Zerar placar do quiz"
               aria-label="Zerar placar do quiz"
-              className="p-2 rounded-xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] text-[#6B655C] dark:text-[#AFAAA0] hover:text-[#1C1B18] dark:hover:text-[#F4F7F6] transition-colors cursor-pointer shrink-0"
+              className="min-w-[48px] min-h-[48px] lg:min-w-[38px] lg:min-h-[38px] inline-flex items-center justify-center rounded-xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] text-[#6B655C] dark:text-[#AFAAA0] hover:text-[#1C1B18] dark:hover:text-[#F4F7F6] transition-colors cursor-pointer shrink-0"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
+              <RotateCcw className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
             </button>
           )}
         </div>
       </div>
 
       {/* Question Card */}
-      <div className="rounded-3xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] p-6 sm:p-8 shadow-xs space-y-6">
+      <div className="rounded-3xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] p-5 sm:p-8 shadow-xs space-y-6">
         <div className="space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#6B655C] dark:text-[#AFAAA0]">
             <span>
@@ -106,9 +110,12 @@ export function QuizView({
               <button
                 type="button"
                 aria-pressed={isPlaying(question.card.term, 'us')}
-                onClick={() => void toggleSpeakEnglishText(question.card.term, 'us')}
+                onClick={() => {
+                  void triggerTap();
+                  void toggleSpeakEnglishText(question.card.term, 'us');
+                }}
                 aria-label={`Ouvir ${question.card.term} em inglês americano`}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                className={`min-h-[48px] lg:min-h-[36px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl lg:rounded-lg border text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                   isPlaying(question.card.term, 'us')
                     ? 'bg-[#28665E] border-[#28665E] text-white dark:bg-[#2A6D63] dark:border-[#3E8E82] dark:text-[#F4F7F6]'
                     : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[#225851] dark:text-[#86CEC2] border-[#C6DBD7] dark:border-[#2F4B46]'
@@ -124,9 +131,12 @@ export function QuizView({
               <button
                 type="button"
                 aria-pressed={isPlaying(question.card.term, 'uk')}
-                onClick={() => void toggleSpeakEnglishText(question.card.term, 'uk')}
+                onClick={() => {
+                  void triggerTap();
+                  void toggleSpeakEnglishText(question.card.term, 'uk');
+                }}
                 aria-label={`Ouvir ${question.card.term} em inglês britânico`}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                className={`min-h-[48px] lg:min-h-[36px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl lg:rounded-lg border text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                   isPlaying(question.card.term, 'uk')
                     ? 'bg-[#243B53] border-[#243B53] text-white dark:bg-[#2E4C6B] dark:border-[#496F96] dark:text-[#F4F7F8]'
                     : 'bg-[#EDF1F5] hover:bg-[#DFE6EE] dark:bg-[#1E2630] dark:hover:bg-[#26313E] text-[#243B53] dark:text-[#9CC3E6] border-[#C9D5E2] dark:border-[#334354]'
@@ -162,9 +172,12 @@ export function QuizView({
               <button
                 type="button"
                 aria-pressed={isPlaying(question.card.exampleEn, 'us')}
-                onClick={() => void toggleSpeakEnglishText(question.card.exampleEn, 'us')}
+                onClick={() => {
+                  void triggerTap();
+                  void toggleSpeakEnglishText(question.card.exampleEn, 'us');
+                }}
                 aria-label="Ouvir frase do exemplo em inglês americano"
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                className={`min-h-[42px] lg:min-h-[30px] inline-flex items-center gap-1 px-3 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                   isPlaying(question.card.exampleEn, 'us')
                     ? 'bg-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
                     : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[#225851] dark:text-[#86CEC2]'
@@ -176,9 +189,12 @@ export function QuizView({
               <button
                 type="button"
                 aria-pressed={isPlaying(question.card.exampleEn, 'uk')}
-                onClick={() => void toggleSpeakEnglishText(question.card.exampleEn, 'uk')}
+                onClick={() => {
+                  void triggerTap();
+                  void toggleSpeakEnglishText(question.card.exampleEn, 'uk');
+                }}
                 aria-label="Ouvir frase do exemplo em inglês britânico"
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                className={`min-h-[42px] lg:min-h-[30px] inline-flex items-center gap-1 px-3 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                   isPlaying(question.card.exampleEn, 'uk')
                     ? 'bg-[#243B53] text-white dark:bg-[#2E4C6B] dark:text-[#F4F7F8]'
                     : 'bg-[#EDF1F5] hover:bg-[#DFE6EE] dark:bg-[#1E2630] dark:hover:bg-[#26313E] text-[#243B53] dark:text-[#9CC3E6]'
@@ -191,11 +207,11 @@ export function QuizView({
           </div>
         </div>
 
-        {/* Options */}
+        {/* Options — >= 52px Touch Targets on Mobile */}
         <div className="space-y-2.5">
           {question.options.map((opt, idx) => {
             let optionStyle =
-              'border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-[#1C1B18] dark:text-[#EBE7DE] hover:border-[#28665E]/50 dark:hover:border-[#68B4A8]/55';
+              'border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-[#1C1B18] dark:text-[#EBE7DE] hover:border-[#28665E]/50 dark:hover:border-[#68B4A8]/55 active:scale-[0.99]';
             if (isAnswered) {
               if (opt.isCorrect) {
                 optionStyle =
@@ -215,7 +231,7 @@ export function QuizView({
                 type="button"
                 disabled={isAnswered}
                 onClick={() => onSelectOption(opt)}
-                className={`w-full text-left px-4 py-3.5 rounded-2xl border text-sm font-medium transition-all flex items-center justify-between gap-3 ${optionStyle} ${
+                className={`w-full min-h-[52px] text-left px-4 py-3.5 rounded-2xl border text-sm font-medium transition-all flex items-center justify-between gap-3 ${optionStyle} ${
                   isAnswered ? 'cursor-default' : 'cursor-pointer'
                 }`}
               >
@@ -264,8 +280,11 @@ export function QuizView({
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={onNextQuestion}
-                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#28665E] hover:bg-[#1F524B] dark:bg-[#2A6D63] dark:hover:bg-[#327D72] text-white dark:text-[#F4F7F6] text-xs font-semibold cursor-pointer transition-colors whitespace-nowrap shrink-0"
+                onClick={() => {
+                  void triggerTap();
+                  onNextQuestion();
+                }}
+                className="min-h-[48px] inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-[#28665E] hover:bg-[#1F524B] dark:bg-[#2A6D63] dark:hover:bg-[#327D72] text-white dark:text-[#F4F7F6] text-xs sm:text-sm font-semibold cursor-pointer transition-colors whitespace-nowrap shrink-0"
               >
                 <span>Próxima pergunta</span>
                 <ArrowRight className="w-4 h-4" />
@@ -276,4 +295,4 @@ export function QuizView({
       </div>
     </div>
   );
-}
+});

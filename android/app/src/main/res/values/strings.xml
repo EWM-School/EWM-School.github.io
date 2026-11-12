@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">EWM - Keep practicing</string>
+    <string name="title_activity_main">EWM - Keep practicing</string>
+    <string name="package_name">com.ewm.keeppracticing</string>
+    <string name="custom_url_scheme">com.ewm.keeppracticing</string>
+</resources>
