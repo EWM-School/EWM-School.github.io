@@ -1,4 +1,5 @@
 import express from 'express';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
@@ -8,6 +9,14 @@ import {
   scoreTeacherSentenceCandidate,
   isGenericTemplateSentence,
 } from './src/utils/grammarEngine.js';
+import {
+  buildGeminiTtsDirective,
+  type TtsCadenceSpeed,
+} from './src/utils/phoneticNormalizer.js';
+import {
+  injectAbsoluteSocialMetadata,
+  resolvePublicOrigin,
+} from './src/utils/seoMetadata.js';
 
 dotenv.config();
 
@@ -19,10 +28,13 @@ const port = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '100kb' }));
 
-// Security headers
-app.use((_req, res, next) => {
+// Security headers & Web App Manifest MIME compliance
+app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-XSS-Protection', '1; mode=block');
+  if (req.path === '/manifest.webmanifest') {
+    res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+  }
   next();
 });
 
@@ -74,6 +86,17 @@ function sanitizeUserInput(raw: unknown, maxLen = 140): string {
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY || '',
   httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    },
+  },
+});
+
+// Dedicated v1beta GoogleGenAI client for Gemini 3.8 TTS (speechConfig & speechMetadata require v1beta in @google/genai >= 3.x)
+const ttsAi = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY || '',
+  httpOptions: {
+    apiVersion: 'v1beta',
     headers: {
       'User-Agent': 'aistudio-build',
     },
@@ -430,7 +453,198 @@ Retorne um JSON com esta estrutura exata:
   }
 });
 
-// Mount Vite in dev mode or serve static files in production
+// -------------------------------------------------------------
+// POST /api/gemini/tts
+// Synthesizes isolated General American (en-US) or British Received Pronunciation (en-GB)
+// neural speech via gemini-3.8-flash-lite-tts with vocal direction & LRU WAV caching
+// -------------------------------------------------------------
+interface CachedTtsEntry {
+  audioBase64: string;
+  mimeType: string;
+  locale: 'en-US' | 'en-GB';
+  voiceName: string;
+  createdAt: number;
+}
+
+const ttsAudioCache = new Map<string, CachedTtsEntry>();
+const MAX_TTS_CACHE_ITEMS = 160;
+
+function getCachedTts(key: string): CachedTtsEntry | undefined {
+  const hit = ttsAudioCache.get(key);
+  if (!hit) return undefined;
+  // Refresh LRU position
+  ttsAudioCache.delete(key);
+  ttsAudioCache.set(key, hit);
+  return hit;
+}
+
+function setCachedTts(key: string, entry: CachedTtsEntry): void {
+  if (ttsAudioCache.has(key)) {
+    ttsAudioCache.delete(key);
+  } else if (ttsAudioCache.size >= MAX_TTS_CACHE_ITEMS) {
+    const oldestKey = ttsAudioCache.keys().next().value;
+    if (oldestKey) ttsAudioCache.delete(oldestKey);
+  }
+  ttsAudioCache.set(key, entry);
+}
+
+app.post('/api/gemini/tts', async (req, res) => {
+  const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
+  if (!checkRateLimit(clientIp)) {
+    return res.status(429).json({
+      success: false,
+      reason: 'RATE_LIMITED',
+      error: 'Muitas solicitações de áudio em sequência. Aguarde um instante.',
+    });
+  }
+
+  const rawText = sanitizeUserInput(req.body?.text, 320);
+  const accent: 'us' | 'uk' = req.body?.accent === 'uk' ? 'uk' : 'us';
+  const speed: TtsCadenceSpeed = req.body?.speed === 'slow' ? 'slow' : 'normal';
+
+  if (!rawText) {
+    return res.status(400).json({
+      success: false,
+      reason: 'INVALID_TEXT',
+      error: 'Texto de pronúncia vazio ou inválido.',
+    });
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+    return res.json({
+      success: false,
+      reason: 'NO_API_KEY',
+      error: 'Chave Gemini não configurada no servidor.',
+    });
+  }
+
+  const directive = buildGeminiTtsDirective(rawText, accent, speed);
+  const cacheKey = `${directive.languageCode}|${speed}|${directive.normalizedText.toLowerCase()}`;
+
+  const cached = getCachedTts(cacheKey);
+  if (cached) {
+    return res.json({
+      success: true,
+      cached: true,
+      mimeType: cached.mimeType,
+      audioBase64: cached.audioBase64,
+      locale: cached.locale,
+      voiceName: cached.voiceName,
+      appliedRules: directive.matchedIpaHints,
+    });
+  }
+
+  // Combine vocal persona + mandatory RP acoustic rules into speechMetadata.style so both
+  // systemInstruction-capable endpoints and pure speechMetadata TTS endpoints enforce full RP rules
+  const comprehensiveDirectorStyle = `${directive.speechStyle} ${directive.systemInstruction.replace(/\s+/g, ' ').trim()}`;
+
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response =
+        attempt === 0
+          ? await ttsAi.models.generateContent({
+              model: 'gemini-3.8-flash-lite-tts',
+              contents: [
+                {
+                  role: 'user',
+                  parts: [
+                    {
+                      text: directive.normalizedText,
+                      speechMetadata: {
+                        style: comprehensiveDirectorStyle,
+                      },
+                    },
+                  ],
+                },
+              ],
+              config: {
+                responseModalities: ['AUDIO'],
+                speechConfig: {
+                  voiceConfig: {
+                    prebuiltVoiceConfig: {
+                      voiceName: directive.voiceName,
+                    },
+                  },
+                },
+              },
+            })
+          : await ttsAi.models.generateContent({
+              model: 'gemini-3.8-flash-lite-tts',
+              contents: [
+                {
+                  role: 'user',
+                  parts: [
+                    {
+                      text: directive.normalizedText,
+                      speechMetadata: {
+                        style: directive.speechStyle,
+                      },
+                    },
+                  ],
+                },
+              ],
+              config: {
+                responseModalities: ['AUDIO'],
+                systemInstruction: directive.systemInstruction,
+                speechConfig: {
+                  languageCode: directive.languageCode,
+                  voiceConfig: {
+                    prebuiltVoiceConfig: {
+                      voiceName: directive.voiceName,
+                    },
+                  },
+                },
+              },
+            });
+
+      const inlineData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+      const audioBase64 = inlineData?.data || '';
+      const mimeType = inlineData?.mimeType || 'audio/wav';
+
+      if (!audioBase64) {
+        return res.json({
+          success: false,
+          reason: 'EMPTY_AUDIO',
+          error: 'O sintetizador neural não retornou áudio.',
+        });
+      }
+
+      setCachedTts(cacheKey, {
+        audioBase64,
+        mimeType,
+        locale: directive.languageCode,
+        voiceName: directive.voiceName,
+        createdAt: Date.now(),
+      });
+
+      return res.json({
+        success: true,
+        cached: false,
+        mimeType,
+        audioBase64,
+        locale: directive.languageCode,
+        voiceName: directive.voiceName,
+        appliedRules: directive.matchedIpaHints,
+      });
+    } catch (err) {
+      lastError = err;
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 150));
+      }
+    }
+  }
+
+  const errMsg = lastError instanceof Error ? lastError.message : String(lastError || '');
+  return res.json({
+    success: false,
+    reason: 'GEMINI_TTS_ERROR',
+    error: errMsg || 'Falha temporária na síntese neural Gemini TTS.',
+  });
+});
+
+// Mount Vite in dev mode or serve static files in production, injecting absolute HTTPS OpenGraph URLs
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
@@ -439,13 +653,54 @@ async function startServer() {
         middlewareMode: true,
         hmr: false,
       },
-      appType: 'spa',
+      appType: 'custom',
     });
     app.use(vite.middlewares);
+
+    app.get('*', async (req, res, next) => {
+      if (
+        req.path.startsWith('/api/') ||
+        req.path.startsWith('/@') ||
+        req.path.startsWith('/src/') ||
+        req.path.startsWith('/node_modules/')
+      ) {
+        return next();
+      }
+      const ext = path.extname(req.path);
+      if (ext && ext !== '.html') {
+        return next();
+      }
+      try {
+        const rawTemplate = await fs.promises.readFile(path.join(__dirname, 'index.html'), 'utf-8');
+        const transformed = await vite.transformIndexHtml(req.originalUrl, rawTemplate);
+        const origin = resolvePublicOrigin(req.headers, process.env.APP_URL);
+        const finalHtml = injectAbsoluteSocialMetadata(transformed, origin, req.path);
+        res.status(200).set({ 'Content-Type': 'text/html; charset=utf-8' }).end(finalHtml);
+      } catch (err) {
+        next(err);
+      }
+    });
   } else {
-    app.use(express.static(path.join(__dirname, 'dist')));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    const distPath = path.join(__dirname, 'dist');
+    const distIndexPath = path.join(distPath, 'index.html');
+    app.use(express.static(distPath, { index: false }));
+
+    app.get('*', async (req, res, next) => {
+      if (req.path.startsWith('/api/')) {
+        return next();
+      }
+      const ext = path.extname(req.path);
+      if (ext && ext !== '.html') {
+        return res.status(404).end();
+      }
+      try {
+        const distTemplate = await fs.promises.readFile(distIndexPath, 'utf-8');
+        const origin = resolvePublicOrigin(req.headers, process.env.APP_URL);
+        const finalHtml = injectAbsoluteSocialMetadata(distTemplate, origin, req.path);
+        res.status(200).set({ 'Content-Type': 'text/html; charset=utf-8' }).end(finalHtml);
+      } catch (err) {
+        next(err);
+      }
     });
   }
 

@@ -31,8 +31,8 @@ import { getCardPhonetics } from '../utils/phonetics';
 import {
   cleanSpeechSearchQuery,
   isSpeechRecognitionSupported,
-  speakEnglishText,
   startVoiceSearch,
+  toggleSpeakEnglishText,
   type SpeechRecognitionController,
 } from '../utils/speech';
 
@@ -413,7 +413,7 @@ export function ListView({
                 <div className="flex items-center gap-1 shrink-0">
                   <button
                     type="button"
-                    onClick={() => void speakEnglishText(card.term, 'us')}
+                    onClick={() => void toggleSpeakEnglishText(card.term, 'us')}
                     title="Ouvir em Inglês Americano (US)"
                     aria-label={`Ouvir ${card.term} em inglês americano`}
                     className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[11px] font-semibold text-[#225851] dark:text-[#86CEC2] transition-colors cursor-pointer whitespace-nowrap shrink-0"
@@ -423,10 +423,10 @@ export function ListView({
                   </button>
                   <button
                     type="button"
-                    onClick={() => void speakEnglishText(card.term, 'uk')}
+                    onClick={() => void toggleSpeakEnglishText(card.term, 'uk')}
                     title="Ouvir em Inglês Britânico (UK)"
                     aria-label={`Ouvir ${card.term} em inglês britânico`}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[11px] font-semibold text-[#225851] dark:text-[#86CEC2] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#EDF1F5] hover:bg-[#DFE6EE] dark:bg-[#1E2630] dark:hover:bg-[#26313E] text-[11px] font-semibold text-[#243B53] dark:text-[#9CC3E6] transition-colors cursor-pointer whitespace-nowrap shrink-0"
                   >
                     <Volume2 className="w-3 h-3" />
                     <span>UK</span>
@@ -566,7 +566,7 @@ export function ListView({
                       <div className="inline-flex items-center gap-1 shrink-0">
                         <button
                           type="button"
-                          onClick={() => void speakEnglishText(card.term, 'us')}
+                          onClick={() => void toggleSpeakEnglishText(card.term, 'us')}
                           title="Ouvir em Inglês Americano (US)"
                           aria-label={`Ouvir ${card.term} em inglês americano`}
                           className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[11px] font-semibold text-[#225851] dark:text-[#86CEC2] transition-colors cursor-pointer whitespace-nowrap shrink-0"
@@ -576,10 +576,10 @@ export function ListView({
                         </button>
                         <button
                           type="button"
-                          onClick={() => void speakEnglishText(card.term, 'uk')}
+                          onClick={() => void toggleSpeakEnglishText(card.term, 'uk')}
                           title="Ouvir em Inglês Britânico (UK)"
                           aria-label={`Ouvir ${card.term} em inglês britânico`}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[11px] font-semibold text-[#225851] dark:text-[#86CEC2] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#EDF1F5] hover:bg-[#DFE6EE] dark:bg-[#1E2630] dark:hover:bg-[#26313E] text-[11px] font-semibold text-[#243B53] dark:text-[#9CC3E6] transition-colors cursor-pointer whitespace-nowrap shrink-0"
                         >
                           <Volume2 className="w-3 h-3" />
                           <span>UK</span>
@@ -615,7 +615,7 @@ export function ListView({
                       <div className="inline-flex items-center gap-1 shrink-0">
                         <button
                           type="button"
-                          onClick={() => void speakEnglishText(card.exampleEn, 'us')}
+                          onClick={() => void toggleSpeakEnglishText(card.exampleEn, 'us')}
                           aria-label={`Ouvir frase 1 de ${card.term} em inglês americano`}
                           className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-[#EAF3F1] dark:bg-[#1E312E] text-[10px] font-semibold text-[#225851] dark:text-[#86CEC2] hover:opacity-85 whitespace-nowrap shrink-0 cursor-pointer"
                         >
@@ -624,9 +624,9 @@ export function ListView({
                         </button>
                         <button
                           type="button"
-                          onClick={() => void speakEnglishText(card.exampleEn, 'uk')}
+                          onClick={() => void toggleSpeakEnglishText(card.exampleEn, 'uk')}
                           aria-label={`Ouvir frase 1 de ${card.term} em inglês britânico`}
-                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-[#EAF3F1] dark:bg-[#1E312E] text-[10px] font-semibold text-[#225851] dark:text-[#86CEC2] hover:opacity-85 whitespace-nowrap shrink-0 cursor-pointer"
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-[#EDF1F5] dark:bg-[#1E2630] text-[10px] font-semibold text-[#243B53] dark:text-[#9CC3E6] hover:opacity-85 whitespace-nowrap shrink-0 cursor-pointer"
                         >
                           <Volume2 className="w-2.5 h-2.5" />
                           <span>UK</span>
@@ -645,7 +645,7 @@ export function ListView({
                       <div className="inline-flex items-center gap-1 shrink-0">
                         <button
                           type="button"
-                          onClick={() => void speakEnglishText(sec.en, 'us')}
+                          onClick={() => void toggleSpeakEnglishText(sec.en, 'us')}
                           aria-label={`Ouvir frase 2 de ${card.term} em inglês americano`}
                           className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-[#EAF3F1] dark:bg-[#1E312E] text-[10px] font-semibold text-[#225851] dark:text-[#86CEC2] hover:opacity-85 whitespace-nowrap shrink-0 cursor-pointer"
                         >
@@ -654,9 +654,9 @@ export function ListView({
                         </button>
                         <button
                           type="button"
-                          onClick={() => void speakEnglishText(sec.en, 'uk')}
+                          onClick={() => void toggleSpeakEnglishText(sec.en, 'uk')}
                           aria-label={`Ouvir frase 2 de ${card.term} em inglês britânico`}
-                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-[#EAF3F1] dark:bg-[#1E312E] text-[10px] font-semibold text-[#225851] dark:text-[#86CEC2] hover:opacity-85 whitespace-nowrap shrink-0 cursor-pointer"
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-[#EDF1F5] dark:bg-[#1E2630] text-[10px] font-semibold text-[#243B53] dark:text-[#9CC3E6] hover:opacity-85 whitespace-nowrap shrink-0 cursor-pointer"
                         >
                           <Volume2 className="w-2.5 h-2.5" />
                           <span>UK</span>

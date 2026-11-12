@@ -10,7 +10,6 @@ import { ListView } from './components/ListView';
 import { MonthlyRankingModal } from './components/MonthlyRankingModal';
 import { PhoneticGrammarModal } from './components/PhoneticGrammarModal';
 import { QuizView } from './components/QuizView';
-import { RoundHistoryBar } from './components/RoundHistoryBar';
 import { StudyView } from './components/StudyView';
 import {
   loadUserStudyStats,
@@ -34,7 +33,6 @@ import {
   ensureUserWorkspaceAndMigrate,
   grantCoAdminByUid,
   onAuthStateChanged,
-  resetAllCardMasteryInCloud,
   revokeCoAdminByUid,
   saveCardMastery,
   signInWithGooglePopup,
@@ -59,7 +57,6 @@ import type {
   QuizOption,
   QuizQuestion,
   StatusFilter,
-  StudyRound,
   StudyScope,
   SubtopicKey,
   SyncStatus,
@@ -77,7 +74,11 @@ import {
   mergeCatalogAndUserCards,
   resolveConnectedDecksCards,
 } from './utils/deckHelpers';
-import { speakEnglishText } from './utils/speech';
+import {
+  compareUsAndUkSpeech,
+  toggleSpeakEnglishText,
+  toggleSpeechSpeed,
+} from './utils/speech';
 
 const STORAGE_KEYS = {
   customCards: 'ewm_v5_visitor_custom_cards',
@@ -87,7 +88,6 @@ const STORAGE_KEYS = {
   connectedDeckIds: 'ewm_v5_visitor_connected_decks',
   selectedIds: 'ewm_flashcards_v4_selected_ids',
   deletedIds: 'ewm_flashcards_v4_deleted_ids',
-  rounds: 'ewm_flashcards_v4_rounds',
   theme: 'ewm_flashcards_v4_theme',
   studyScope: 'ewm_flashcards_v4_study_scope',
   legacyMarianaPhoto: 'ewm_v5_mariana_photo',
@@ -180,19 +180,6 @@ function loadInitialSelectedIds(): Set<string> {
   return new Set(DEFAULT_STARTER_STUDY_IDS);
 }
 
-function loadInitialRounds(): StudyRound[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.rounds);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch {
-    // ignore
-  }
-  return [{ round: 1, startedAt: Date.now(), masteredIds: [], reviewIds: [] }];
-}
-
 function loadInitialTheme(): ThemeMode {
   try {
     const saved = localStorage.getItem(STORAGE_KEYS.theme);
@@ -241,7 +228,6 @@ export default function App() {
   const [selectedStudyIds, setSelectedStudyIds] = useState<Set<string>>(() =>
     loadInitialSelectedIds()
   );
-  const [studyRounds, setStudyRounds] = useState<StudyRound[]>(() => loadInitialRounds());
   const [theme, setTheme] = useState<ThemeMode>(() => loadInitialTheme());
   const [shuffleOrderIds, setShuffleOrderIds] = useState<string[] | null>(null);
   const [showCover, setShowCover] = useState<boolean>(() => {
@@ -281,7 +267,6 @@ export default function App() {
   const [phoneticModalOpen, setPhoneticModalOpen] = useState(false);
   const [pendingDeleteCard, setPendingDeleteCard] = useState<Flashcard | null>(null);
   const [pendingDeleteDeck, setPendingDeleteDeck] = useState<UserDeck | null>(null);
-  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [rankingModalOpen, setRankingModalOpen] = useState(false);
   const [userStats, setUserStats] = useState<UserStudyStats>(() => loadUserStudyStats());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -358,14 +343,22 @@ export default function App() {
   const [quizScore, setQuizScore] = useState(0);
   const [quizTotal, setQuizTotal] = useState(0);
 
-  // Sync dark class to <html>
+  // Sync dark class, color-scheme, and iOS status bar theme-color to <html> & <head>
   useEffect(() => {
     const root = document.documentElement;
+    const activeThemeColor = theme === 'dark' ? '#181A18' : '#F6F4EF';
     if (theme === 'dark') {
       root.classList.add('dark');
     } else {
       root.classList.remove('dark');
     }
+    root.style.colorScheme = theme;
+
+    const themeMetaTags = document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]');
+    themeMetaTags.forEach((tag) => {
+      tag.setAttribute('content', activeThemeColor);
+    });
+
     try {
       localStorage.setItem(STORAGE_KEYS.theme, theme);
     } catch {
@@ -395,7 +388,6 @@ export default function App() {
         JSON.stringify(Array.from(selectedStudyIds))
       );
       localStorage.setItem(STORAGE_KEYS.deletedIds, JSON.stringify(deletedIds));
-      localStorage.setItem(STORAGE_KEYS.rounds, JSON.stringify(studyRounds));
       localStorage.setItem(STORAGE_KEYS.studyScope, studyScope);
     } catch {
       // ignore
@@ -408,7 +400,6 @@ export default function App() {
     connectedDeckIds,
     selectedStudyIds,
     deletedIds,
-    studyRounds,
     studyScope,
   ]);
 
@@ -448,7 +439,7 @@ export default function App() {
     studyScope,
     selectedCardIds: Array.from(selectedStudyIds),
     connectedDeckIds,
-    activeRound: studyRounds[studyRounds.length - 1]?.round || 1,
+    activeRound: 1,
     customCards,
     decks: userDecks,
     progressMap,
@@ -457,7 +448,7 @@ export default function App() {
     studyScope,
     selectedCardIds: Array.from(selectedStudyIds),
     connectedDeckIds,
-    activeRound: studyRounds[studyRounds.length - 1]?.round || 1,
+    activeRound: 1,
     customCards,
     decks: userDecks,
     progressMap,
@@ -543,7 +534,6 @@ export default function App() {
       studyScope?: StudyScope;
       selectedCardIds?: string[];
       connectedDeckIds?: string[];
-      activeRound?: number;
     }) => {
       if (!currentUser || cloudReadyForUidRef.current !== currentUser.uid) return;
       const uid = currentUser.uid;
@@ -551,8 +541,7 @@ export default function App() {
         studyScope: nextPatch.studyScope ?? studyScope,
         selectedCardIds: nextPatch.selectedCardIds ?? Array.from(selectedStudyIds),
         connectedDeckIds: nextPatch.connectedDeckIds ?? connectedDeckIds,
-        activeRound:
-          nextPatch.activeRound ?? (studyRounds[studyRounds.length - 1]?.round || 1),
+        activeRound: 1,
       };
 
       setSyncStatus('syncing');
@@ -566,7 +555,7 @@ export default function App() {
         }
       }, 650);
     },
-    [currentUser, studyScope, selectedStudyIds, connectedDeckIds, studyRounds]
+    [currentUser, studyScope, selectedStudyIds, connectedDeckIds]
   );
 
   const { folderCounts, subtopicCounts } = useMemo(() => {
@@ -684,34 +673,18 @@ export default function App() {
       const current = filteredStudyCards[safeIdx];
       if (!current) return;
 
-      const currentRound = studyRounds[studyRounds.length - 1]?.round || 1;
-
       setProgressMap((prev) => ({
         ...prev,
         [current.id]: {
           cardId: current.id,
           masteryLevel: newStatus,
-          roundMarked: currentRound,
+          roundMarked: 1,
         },
       }));
 
-      setStudyRounds((prev) => {
-        const copy = [...prev];
-        const last = { ...copy[copy.length - 1] };
-        last.masteredIds = last.masteredIds.filter((id) => id !== current.id);
-        last.reviewIds = last.reviewIds.filter((id) => id !== current.id);
-        if (newStatus === 'mastered') {
-          last.masteredIds = [...last.masteredIds, current.id];
-        } else {
-          last.reviewIds = [...last.reviewIds, current.id];
-        }
-        copy[copy.length - 1] = last;
-        return copy;
-      });
-
       if (currentUser && cloudReadyForUidRef.current === currentUser.uid) {
         setSyncStatus('syncing');
-        void saveCardMastery(currentUser.uid, current.id, newStatus, currentRound)
+        void saveCardMastery(currentUser.uid, current.id, newStatus, 1)
           .then(() => setSyncStatus('synced'))
           .catch(() => setSyncStatus('error'));
       }
@@ -725,7 +698,7 @@ export default function App() {
       setIsFlipped(false);
       setCurrentIndex((prev) => (prev + 1 < filteredStudyCards.length ? prev + 1 : 0));
     },
-    [filteredStudyCards, currentIndex, studyRounds, currentUser, showToast]
+    [filteredStudyCards, currentIndex, currentUser, showToast]
   );
 
   // Keyboard shortcuts for Study Mode
@@ -744,7 +717,6 @@ export default function App() {
         setPhoneticModalOpen(false);
         setPendingDeleteCard(null);
         setPendingDeleteDeck(null);
-        setConfirmResetOpen(false);
         if (focusMode) setFocusMode(false);
         return;
       }
@@ -755,14 +727,18 @@ export default function App() {
         cardModalOpen ||
         adminModalOpen ||
         phoneticModalOpen ||
+        rankingModalOpen ||
         pendingDeleteCard ||
-        pendingDeleteDeck ||
-        confirmResetOpen
+        pendingDeleteDeck
       ) {
         return;
       }
 
-      if (e.key.toLowerCase() === 'f' && activeTab === 'study') {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      const lowerKey = e.key.toLowerCase();
+
+      if (lowerKey === 'f' && activeTab === 'study') {
         e.preventDefault();
         setFocusMode((v) => !v);
         return;
@@ -785,15 +761,32 @@ export default function App() {
       } else if (e.key === '2') {
         e.preventDefault();
         handleMarkStatus('mastered');
-      } else if (e.key.toLowerCase() === 'u' || e.key.toLowerCase() === 'b') {
+      } else if (lowerKey === 'u' || lowerKey === 'b') {
         if (filteredStudyCards.length > 0) {
           e.preventDefault();
           const safeIdx = Math.min(currentIndex, filteredStudyCards.length - 1);
           const current = filteredStudyCards[safeIdx];
           if (current) {
-            void speakEnglishText(current.term, e.key.toLowerCase() === 'b' ? 'uk' : 'us');
+            void toggleSpeakEnglishText(current.term, lowerKey === 'b' ? 'uk' : 'us');
           }
         }
+      } else if (lowerKey === 'c') {
+        if (filteredStudyCards.length > 0) {
+          e.preventDefault();
+          const safeIdx = Math.min(currentIndex, filteredStudyCards.length - 1);
+          const current = filteredStudyCards[safeIdx];
+          if (current) {
+            void compareUsAndUkSpeech(current.term, current.term);
+          }
+        }
+      } else if (lowerKey === 's') {
+        e.preventDefault();
+        const nextSpeed = toggleSpeechSpeed();
+        showToast(
+          nextSpeed === 'slow'
+            ? 'Velocidade da pronúncia: Lenta (0.7x)'
+            : 'Velocidade da pronúncia: Normal (1x)'
+        );
       }
     };
 
@@ -806,14 +799,15 @@ export default function App() {
     cardModalOpen,
     adminModalOpen,
     phoneticModalOpen,
+    rankingModalOpen,
     pendingDeleteCard,
     pendingDeleteDeck,
-    confirmResetOpen,
     filteredStudyCards,
     currentIndex,
     handleNextCard,
     handlePrevCard,
     handleMarkStatus,
+    showToast,
   ]);
 
   const handleShuffle = () => {
@@ -1160,53 +1154,6 @@ export default function App() {
     showToast(`"${target.term}" removido.`);
   };
 
-  const handleConfirmResetProgress = () => {
-    const previousProgressIds = Object.keys(progressMap);
-    const nextRoundNum = (studyRounds[studyRounds.length - 1]?.round || 0) + 1;
-
-    setProgressMap({});
-    setStudyRounds((prev) => [
-      ...prev,
-      {
-        round: nextRoundNum,
-        startedAt: Date.now(),
-        masteredIds: [],
-        reviewIds: [],
-      },
-    ]);
-
-    if (currentUser && cloudReadyForUidRef.current === currentUser.uid) {
-      setSyncStatus('syncing');
-      void resetAllCardMasteryInCloud(currentUser.uid, previousProgressIds, nextRoundNum)
-        .then(() => updateUserWorkspaceSettings(currentUser.uid, {
-          studyScope,
-          selectedCardIds: Array.from(selectedStudyIds),
-          connectedDeckIds,
-          activeRound: nextRoundNum,
-        }))
-        .then(() => setSyncStatus('synced'))
-        .catch(() => setSyncStatus('error'));
-    }
-
-    setConfirmResetOpen(false);
-    setCurrentIndex(0);
-    setIsFlipped(false);
-    showToast('Nova rodada iniciada com todos os cards zerados.');
-  };
-
-  const handleJumpToCard = (cardId: string) => {
-    setActiveTab('study');
-    setStudyScope('all');
-    setSelectedCategory('all');
-    setSelectedSubtopic('all');
-    setSelectedStatus('all');
-    const idx = cards.findIndex((c) => c.id === cardId);
-    if (idx !== -1) {
-      setCurrentIndex(idx);
-      setIsFlipped(false);
-    }
-  };
-
   const handleSelectQuizOption = (option: QuizOption) => {
     if (quizSelectedOptionId !== null) return;
     setQuizSelectedOptionId(option.id);
@@ -1345,16 +1292,7 @@ export default function App() {
             onOpenAdminPanel={() => setAdminModalOpen(true)}
           />
 
-          <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-5 sm:py-7 space-y-5">
-        {!focusMode && activeTab !== 'decks' && (
-          <RoundHistoryBar
-            cards={cards}
-            studyRounds={studyRounds}
-            onResetProgress={() => setConfirmResetOpen(true)}
-            onJumpToCard={handleJumpToCard}
-          />
-        )}
-
+          <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-5 sm:py-7 space-y-5 ios-safe-main">
         {!focusMode && (activeTab === 'study' || activeTab === 'list') && (
           <FilterToolbar
             selectedCategory={selectedCategory}
@@ -1625,22 +1563,12 @@ export default function App() {
         onCancel={() => setPendingDeleteDeck(null)}
       />
 
-      <ConfirmModal
-        isOpen={confirmResetOpen}
-        title="Iniciar nova rodada?"
-        description="Todos os cards voltarão para o status inicial para você praticar novamente, mantendo o histórico das rodadas anteriores."
-        confirmLabel="Iniciar nova rodada"
-        tone="primary"
-        onConfirm={handleConfirmResetProgress}
-        onCancel={() => setConfirmResetOpen(false)}
-      />
-
       {/* Toast Notification */}
       {toastMessage && (
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-5 right-5 z-50 rounded-2xl border border-[#E4E0D8] dark:border-[#365751] bg-[#1C1B18] dark:bg-[#232926] text-[#F6F4EF] dark:text-[#EBE7DE] px-4 py-2.5 text-xs font-semibold shadow-lg"
+          className="fixed bottom-5 right-5 ios-safe-toast z-50 rounded-2xl border border-[#E4E0D8] dark:border-[#365751] bg-[#1C1B18] dark:bg-[#232926] text-[#F6F4EF] dark:text-[#EBE7DE] px-4 py-2.5 text-xs font-semibold shadow-lg"
         >
           {toastMessage}
         </div>

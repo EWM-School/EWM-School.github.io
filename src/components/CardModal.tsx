@@ -18,7 +18,7 @@ import {
   getCardPhonetics,
   synthesizeOfflinePhrasePhonetics,
 } from '../utils/phonetics';
-import { speakEnglishText } from '../utils/speech';
+import { stopCurrentAudio, toggleSpeakEnglishText } from '../utils/speech';
 
 interface CardModalProps {
   isOpen: boolean;
@@ -491,7 +491,7 @@ export function CardModal({
                   <button
                     type="button"
                     disabled={!term.trim()}
-                    onClick={() => void speakEnglishText(term.trim(), 'us')}
+                    onClick={() => void toggleSpeakEnglishText(term.trim(), 'us')}
                     aria-label="Testar pronúncia em inglês americano"
                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#EAF3F1] dark:bg-[#1E312E] text-[11px] font-semibold text-[#28665E] dark:text-[#86CEC2] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0"
                   >
@@ -501,9 +501,9 @@ export function CardModal({
                   <button
                     type="button"
                     disabled={!term.trim()}
-                    onClick={() => void speakEnglishText(term.trim(), 'uk')}
+                    onClick={() => void toggleSpeakEnglishText(term.trim(), 'uk')}
                     aria-label="Testar pronúncia em inglês britânico"
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#EAF3F1] dark:bg-[#1E312E] text-[11px] font-semibold text-[#28665E] dark:text-[#86CEC2] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#EDF1F5] dark:bg-[#1E2630] text-[11px] font-semibold text-[#243B53] dark:text-[#9CC3E6] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0"
                   >
                     <Volume2 className="w-3 h-3" />
                     <span>Ouvir UK</span>
@@ -701,7 +701,7 @@ export function CardModal({
                   <button
                     type="button"
                     disabled={!exampleEn.trim()}
-                    onClick={() => void speakEnglishText(exampleEn.trim(), 'us')}
+                    onClick={() => void toggleSpeakEnglishText(exampleEn.trim(), 'us')}
                     aria-label="Ouvir Exemplo 1 em inglês americano"
                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#28665E] dark:hover:text-[#86CEC2] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0"
                   >
@@ -711,9 +711,9 @@ export function CardModal({
                   <button
                     type="button"
                     disabled={!exampleEn.trim()}
-                    onClick={() => void speakEnglishText(exampleEn.trim(), 'uk')}
+                    onClick={() => void toggleSpeakEnglishText(exampleEn.trim(), 'uk')}
                     aria-label="Ouvir Exemplo 1 em inglês britânico"
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#28665E] dark:hover:text-[#86CEC2] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#243B53] dark:hover:text-[#9CC3E6] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0"
                   >
                     <Volume2 className="w-3 h-3" />
                     <span>UK</span>
@@ -773,7 +773,7 @@ export function CardModal({
                   <button
                     type="button"
                     disabled={!exampleEn2.trim()}
-                    onClick={() => void speakEnglishText(exampleEn2.trim(), 'us')}
+                    onClick={() => void toggleSpeakEnglishText(exampleEn2.trim(), 'us')}
                     aria-label="Ouvir Exemplo 2 em inglês americano"
                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#28665E] dark:hover:text-[#86CEC2] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0"
                   >
@@ -783,9 +783,9 @@ export function CardModal({
                   <button
                     type="button"
                     disabled={!exampleEn2.trim()}
-                    onClick={() => void speakEnglishText(exampleEn2.trim(), 'uk')}
+                    onClick={() => void toggleSpeakEnglishText(exampleEn2.trim(), 'uk')}
                     aria-label="Ouvir Exemplo 2 em inglês britânico"
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#28665E] dark:hover:text-[#86CEC2] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#243B53] dark:hover:text-[#9CC3E6] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0"
                   >
                     <Volume2 className="w-3 h-3" />
                     <span>UK</span>

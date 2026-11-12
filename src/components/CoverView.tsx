@@ -16,6 +16,7 @@ import {
 } from '../utils/coverHelpers';
 import { TopStudentsCoverPodium } from './TopStudentsCoverPodium';
 import { MonthlyRankingModal } from './MonthlyRankingModal';
+import { PWAInstallButton } from './PWAInstallButton';
 import type { UserStudyStats } from '../utils/studyMetrics';
 
 const TEACHER_MARIANA_PORTRAIT_SRC =
@@ -161,20 +162,21 @@ export function CoverView({
       />
 
       {/* Strict 3-Zone Top Bar Contract with Docked Live Ranking */}
-      <header className="border-b border-[#E4E0D8] dark:border-[#2E332E] bg-[#F6F4EF]/90 dark:bg-[#181A18]/90 backdrop-blur-md sticky top-0 z-30">
+      <header className="ios-safe-header border-b border-[#E4E0D8] dark:border-[#2E332E] bg-[#F6F4EF]/90 dark:bg-[#181A18]/90 backdrop-blur-md sticky top-0 z-30">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4 sm:gap-6">
           {/* Zone 1: Single text element wordmark */}
           <a
             href="#capa-inicio"
             className="font-display text-base sm:text-lg font-bold tracking-tight text-[#1C1B18] dark:text-[#EBE7DE] whitespace-nowrap shrink-0"
           >
-            EWM · Keep practicing
+            <span className="sm:hidden">EWM</span>
+            <span className="hidden sm:inline">EWM · Keep practicing</span>
           </a>
 
           {/* Zone 2: clean single-line text navigation links */}
           <nav
             aria-label="Navegação da capa"
-            className="hidden md:flex items-center gap-6 lg:gap-7 text-sm font-medium text-[#5C574E] dark:text-[#AFAAA0]"
+            className="hidden lg:flex items-center gap-5 xl:gap-7 text-sm font-medium text-[#5C574E] dark:text-[#AFAAA0]"
           >
             <a
               href="#metodo-ewm"
@@ -216,10 +218,11 @@ export function CoverView({
             <button
               type="button"
               onClick={() => onEnterApp('study')}
-              className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-[#28665E] hover:bg-[#1F524B] dark:bg-[#2A6D63] dark:hover:bg-[#327D72] text-white dark:text-[#F4F7F6] text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              title={isLoggedIn ? 'Ir para os flashcards e continuar rodada' : 'Começar a praticar o acervo de flashcards'}
+              className="w-36 sm:w-40 h-[43px] inline-flex items-center justify-center gap-2 px-3 rounded-xl bg-[#28665E] hover:bg-[#1F524B] active:bg-[#1A453F] dark:bg-[#2A6D63] dark:hover:bg-[#327D72] dark:active:bg-[#235C53] text-white dark:text-[#F4F7F6] text-xs sm:text-sm font-semibold shadow-xs transition-all duration-200 cursor-pointer select-none group shrink-0"
             >
-              <span>{isLoggedIn ? 'Ir para os Cards' : 'Praticar agora'}</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <span className="truncate">{isLoggedIn ? 'Ir para os Cards' : 'Praticar agora'}</span>
+              <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white/90 dark:text-[#F4F7F6]/90 transition-transform duration-200 group-hover:translate-x-0.5 shrink-0" />
             </button>
           </div>
         </div>
@@ -227,7 +230,7 @@ export function CoverView({
 
       <main
         id="capa-inicio"
-        className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-7 sm:py-11 space-y-10 sm:space-y-14"
+        className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-7 sm:py-11 space-y-8 sm:space-y-10 ios-safe-main"
       >
         {/* 2-Column Editorial Hero + Login Split (items-stretch for balanced height) */}
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-7 lg:gap-10 items-stretch animate-card-enter">
@@ -453,7 +456,7 @@ export function CoverView({
                       <span className="whitespace-nowrap">
                         {isSigningIn
                           ? 'Conectando com Google...'
-                          : 'Entrar com Google · Salvar na nuvem'}
+                          : 'Login com Google'}
                       </span>
                     </button>
 
@@ -666,10 +669,10 @@ export function CoverView({
       </main>
 
       {/* Quiet Editorial Footer */}
-      <footer className="border-t border-[#E4E0D8] dark:border-[#2E332E] py-5 px-4 sm:px-6 text-xs text-[#6B655C] dark:text-[#9E998F]">
+      <footer className="ios-safe-footer border-t border-[#E4E0D8] dark:border-[#2E332E] pt-5 px-4 sm:px-6 text-xs text-[#6B655C] dark:text-[#9E998F]">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <span>EWM · Keep practicing — Teacher Mariana</span>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-center gap-4">
             <button
               type="button"
               onClick={() => onEnterApp('study')}
@@ -691,6 +694,7 @@ export function CoverView({
             >
               Guia Fonético
             </button>
+            <PWAInstallButton />
           </div>
         </div>
       </footer>

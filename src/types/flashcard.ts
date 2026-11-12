@@ -83,13 +83,6 @@ export interface AdminRecord {
   label: string;
 }
 
-export interface StudyRound {
-  round: number;
-  startedAt: number;
-  masteredIds: string[];
-  reviewIds: string[];
-}
-
 export interface SecondExamplePair {
   en: string;
   pt: string;

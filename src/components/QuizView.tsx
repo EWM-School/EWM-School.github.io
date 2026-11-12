@@ -1,7 +1,15 @@
+import { useEffect, useState } from 'react';
 import { ArrowRight, CheckCircle2, RotateCcw, Volume2, XCircle } from 'lucide-react';
-import type { QuizOption, QuizQuestion } from '../types/flashcard';
+import type { EnglishAccent, QuizOption, QuizQuestion } from '../types/flashcard';
 import { getCardPhonetics } from '../utils/phonetics';
-import { speakEnglishText } from '../utils/speech';
+import {
+  cleanEnglishForSpeech,
+  stopCurrentAudio,
+  subscribeAudioPlayback,
+  toggleSpeakEnglishText,
+  type ActiveAudioPlayback,
+} from '../utils/speech';
+import { AudioWaveIcon } from './CardAudioControls';
 
 interface QuizViewProps {
   question: QuizQuestion | null;
@@ -22,6 +30,21 @@ export function QuizView({
   onNextQuestion,
   onResetScore,
 }: QuizViewProps) {
+  const [activeAudio, setActiveAudio] = useState<ActiveAudioPlayback | null>(null);
+  const questionCardId = question?.card.id ?? null;
+
+  useEffect(() => {
+    const unsub = subscribeAudioPlayback(setActiveAudio);
+    return () => {
+      unsub();
+      stopCurrentAudio();
+    };
+  }, []);
+
+  useEffect(() => {
+    stopCurrentAudio();
+  }, [questionCardId]);
+
   if (!question) {
     return (
       <div className="rounded-3xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] p-8 text-center text-sm text-[#5C574E] dark:text-[#AFAAA0]">
@@ -34,6 +57,11 @@ export function QuizView({
   const chosenOption = question.options.find((o) => o.id === selectedOptionId) || null;
   const isCorrectChoice = Boolean(chosenOption?.isCorrect);
   const phonetics = getCardPhonetics(question.card);
+
+  const isPlaying = (rawText: string, accent: EnglishAccent) =>
+    Boolean(activeAudio) &&
+    activeAudio?.accent === accent &&
+    activeAudio?.text === cleanEnglishForSpeech(rawText);
 
   return (
     <div className="max-w-2xl mx-auto space-y-5 animate-card-enter">
@@ -77,20 +105,38 @@ export function QuizView({
             <div className="inline-flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => void speakEnglishText(question.card.term, 'us')}
+                aria-pressed={isPlaying(question.card.term, 'us')}
+                onClick={() => void toggleSpeakEnglishText(question.card.term, 'us')}
                 aria-label={`Ouvir ${question.card.term} em inglês americano`}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[#225851] dark:text-[#86CEC2] border border-[#C6DBD7] dark:border-[#2F4B46] text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  isPlaying(question.card.term, 'us')
+                    ? 'bg-[#28665E] border-[#28665E] text-white dark:bg-[#2A6D63] dark:border-[#3E8E82] dark:text-[#F4F7F6]'
+                    : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[#225851] dark:text-[#86CEC2] border-[#C6DBD7] dark:border-[#2F4B46]'
+                }`}
               >
-                <Volume2 className="w-3.5 h-3.5" />
+                {isPlaying(question.card.term, 'us') ? (
+                  <AudioWaveIcon className="w-3.5 h-3" />
+                ) : (
+                  <Volume2 className="w-3.5 h-3.5" />
+                )}
                 <span>Ouvir US</span>
               </button>
               <button
                 type="button"
-                onClick={() => void speakEnglishText(question.card.term, 'uk')}
+                aria-pressed={isPlaying(question.card.term, 'uk')}
+                onClick={() => void toggleSpeakEnglishText(question.card.term, 'uk')}
                 aria-label={`Ouvir ${question.card.term} em inglês britânico`}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[#225851] dark:text-[#86CEC2] border border-[#C6DBD7] dark:border-[#2F4B46] text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  isPlaying(question.card.term, 'uk')
+                    ? 'bg-[#243B53] border-[#243B53] text-white dark:bg-[#2E4C6B] dark:border-[#496F96] dark:text-[#F4F7F8]'
+                    : 'bg-[#EDF1F5] hover:bg-[#DFE6EE] dark:bg-[#1E2630] dark:hover:bg-[#26313E] text-[#243B53] dark:text-[#9CC3E6] border-[#C9D5E2] dark:border-[#334354]'
+                }`}
               >
-                <Volume2 className="w-3.5 h-3.5" />
+                {isPlaying(question.card.term, 'uk') ? (
+                  <AudioWaveIcon className="w-3.5 h-3" />
+                ) : (
+                  <Volume2 className="w-3.5 h-3.5" />
+                )}
                 <span>Ouvir UK</span>
               </button>
             </div>
@@ -115,18 +161,28 @@ export function QuizView({
             <div className="inline-flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
-                onClick={() => void speakEnglishText(question.card.exampleEn, 'us')}
+                aria-pressed={isPlaying(question.card.exampleEn, 'us')}
+                onClick={() => void toggleSpeakEnglishText(question.card.exampleEn, 'us')}
                 aria-label="Ouvir frase do exemplo em inglês americano"
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[11px] font-semibold text-[#225851] dark:text-[#86CEC2] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  isPlaying(question.card.exampleEn, 'us')
+                    ? 'bg-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
+                    : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[#225851] dark:text-[#86CEC2]'
+                }`}
               >
                 <Volume2 className="w-3 h-3" />
                 <span>US</span>
               </button>
               <button
                 type="button"
-                onClick={() => void speakEnglishText(question.card.exampleEn, 'uk')}
+                aria-pressed={isPlaying(question.card.exampleEn, 'uk')}
+                onClick={() => void toggleSpeakEnglishText(question.card.exampleEn, 'uk')}
                 aria-label="Ouvir frase do exemplo em inglês britânico"
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[11px] font-semibold text-[#225851] dark:text-[#86CEC2] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  isPlaying(question.card.exampleEn, 'uk')
+                    ? 'bg-[#243B53] text-white dark:bg-[#2E4C6B] dark:text-[#F4F7F8]'
+                    : 'bg-[#EDF1F5] hover:bg-[#DFE6EE] dark:bg-[#1E2630] dark:hover:bg-[#26313E] text-[#243B53] dark:text-[#9CC3E6]'
+                }`}
               >
                 <Volume2 className="w-3 h-3" />
                 <span>UK</span>

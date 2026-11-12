@@ -85,7 +85,7 @@ export function Header({
     : '';
 
   return (
-    <header className="sticky top-0 z-30 border-b border-[#E4E0D8] dark:border-[#2E332E] bg-[#F6F4EF]/90 dark:bg-[#181A18]/90 backdrop-blur-md transition-colors">
+    <header className="ios-safe-header sticky top-0 z-30 border-b border-[#E4E0D8] dark:border-[#2E332E] bg-[#F6F4EF]/90 dark:bg-[#181A18]/90 backdrop-blur-md transition-colors">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="h-16 flex items-center justify-between gap-2 sm:gap-3">
           {/* Brand Lockup (Click to return to Cover/Login) + Subtle Sync Status */}

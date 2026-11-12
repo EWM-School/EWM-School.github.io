@@ -20,10 +20,20 @@ import { getCardSecondExample } from '../utils/deckHelpers';
 import { getCardPhonetics } from '../utils/phonetics';
 import {
   cleanEnglishForSpeech,
-  speakEnglishText,
+  getSpeechSpeed,
+  stopCurrentAudio,
   subscribeAudioPlayback,
+  subscribeSpeechSpeed,
+  toggleSpeakEnglishText,
   type ActiveAudioPlayback,
+  type SpeechSpeed,
 } from '../utils/speech';
+import {
+  AudioWaveIcon,
+  BackFaceTermAudioControls,
+  CardTermAudioControls,
+  SentenceAudioButtons,
+} from './CardAudioControls';
 import { DailyGoalProgressBar } from './DailyGoalProgressBar';
 import type { UserStudyStats } from '../utils/studyMetrics';
 
@@ -79,13 +89,26 @@ export function StudyView({
   onResetFilters,
 }: StudyViewProps) {
   const [activeAudio, setActiveAudio] = useState<ActiveAudioPlayback | null>(null);
+  const [speechSpeed, setSpeechSpeed] = useState<SpeechSpeed>(() => getSpeechSpeed());
 
   useEffect(() => {
-    return subscribeAudioPlayback(setActiveAudio);
+    const unsubAudio = subscribeAudioPlayback(setActiveAudio);
+    const unsubSpeed = subscribeSpeechSpeed(setSpeechSpeed);
+    return () => {
+      unsubAudio();
+      unsubSpeed();
+      stopCurrentAudio();
+    };
   }, []);
 
   const safeIndex = cards.length > 0 ? Math.min(currentIndex, cards.length - 1) : 0;
   const currentCard = cards[safeIndex] || null;
+  const currentCardId = currentCard?.id ?? null;
+
+  useEffect(() => {
+    stopCurrentAudio();
+  }, [currentCardId]);
+
   const secondExample = currentCard ? getCardSecondExample(currentCard) : { en: '', pt: '' };
   const phonetics = currentCard
     ? getCardPhonetics(currentCard)
@@ -274,17 +297,9 @@ export function StudyView({
         <div className="max-w-3xl mx-auto space-y-4 sm:space-y-5">
           {/* 3D Animated Flashcard Stage */}
           <div key={currentCard.id} className="flashcard-perspective animate-card-enter">
-            <div
+            <article
               onClick={onToggleFlip}
-              role="button"
-              tabIndex={0}
-              aria-label={`Flashcard ${currentCard.term}. Clique ou pressione Espaço para virar.`}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  onToggleFlip();
-                }
-              }}
+              aria-label={`Flashcard ${currentCard.term}`}
               className={`flashcard-inner cursor-pointer select-none ${
                 isFlipped ? 'is-flipped' : ''
               }`}
@@ -354,68 +369,22 @@ export function StudyView({
                   </div>
                 </div>
 
-                {/* Center Hero Term + Dual US/UK Phonetics + Dual Native Audio Controls */}
-                <div className="my-5 text-center space-y-4">
-                  <div className="space-y-2.5">
-                    <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight text-[#1C1B18] dark:text-[#EBE7DE] leading-tight">
-                      {currentCard.term}
-                    </h2>
-
-                    {/* Clean Unboxed Comparative US & UK Phonetics */}
-                    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs sm:text-[13px] font-mono-num text-[#225851] dark:text-[#86CEC2]">
-                      <span>
-                        <span className="font-sans font-semibold mr-1">US</span>
-                        {phonetics.us}
-                      </span>
-                      <span aria-hidden="true" className="text-[#C6C0B4] dark:text-[#4D544D]">
-                        ·
-                      </span>
-                      <span>
-                        <span className="font-sans font-semibold mr-1">UK</span>
-                        {phonetics.uk}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Side-by-Side US & UK Native Voice Buttons (User chooses either one inside each card) */}
-                  <div
-                    className="flex flex-wrap items-center justify-center gap-2.5"
-                    onClick={(e) => e.stopPropagation()}
+                {/* Center Hero Term + Dual US/UK Phonetics + Dual Native Web Speech Audio Controls */}
+                <div className="my-5 text-center space-y-3.5">
+                  <h2
+                    style={{ textWrap: 'balance' }}
+                    className="font-display text-3xl sm:text-4xl font-bold tracking-tight text-[#1C1B18] dark:text-[#EBE7DE] leading-tight"
                   >
-                    <button
-                      type="button"
-                      onClick={() => void speakEnglishText(currentCard.term, 'us')}
-                      aria-label={`Ouvir ${currentCard.term} em inglês americano`}
-                      title="Ouvir pronúncia nativa em Inglês Americano (Atalho U)"
-                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                        isPlaying(currentCard.term, 'us')
-                          ? 'bg-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
-                          : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[#225851] dark:text-[#86CEC2] border border-[#C6DBD7] dark:border-[#2F4B46]'
-                      }`}
-                    >
-                      <Volume2 className="w-4 h-4 shrink-0" />
-                      <span>
-                        {isPlaying(currentCard.term, 'us') ? 'Ouvindo US...' : 'Ouvir US'}
-                      </span>
-                    </button>
+                    {currentCard.term}
+                  </h2>
 
-                    <button
-                      type="button"
-                      onClick={() => void speakEnglishText(currentCard.term, 'uk')}
-                      aria-label={`Ouvir ${currentCard.term} em inglês britânico`}
-                      title="Ouvir pronúncia nativa em Inglês Britânico (Atalho B)"
-                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                        isPlaying(currentCard.term, 'uk')
-                          ? 'bg-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
-                          : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[#225851] dark:text-[#86CEC2] border border-[#C6DBD7] dark:border-[#2F4B46]'
-                      }`}
-                    >
-                      <Volume2 className="w-4 h-4 shrink-0" />
-                      <span>
-                        {isPlaying(currentCard.term, 'uk') ? 'Ouvindo UK...' : 'Ouvir UK'}
-                      </span>
-                    </button>
-                  </div>
+                  <CardTermAudioControls
+                    term={currentCard.term}
+                    phoneticUs={phonetics.us}
+                    phoneticUk={phonetics.uk}
+                    activeAudio={activeAudio}
+                    speed={speechSpeed}
+                  />
                 </div>
 
                 {/* Two Real-Life English Sentences with US & UK Audio Choice Each */}
@@ -430,36 +399,12 @@ export function StudyView({
                       </span>
                       <span>&ldquo;{currentCard.exampleEn}&rdquo;</span>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => void speakEnglishText(currentCard.exampleEn, 'us')}
-                        aria-label="Ouvir frase 1 em inglês americano"
-                        title="Ouvir frase 1 em Inglês Americano (US)"
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                          isPlaying(currentCard.exampleEn, 'us')
-                            ? 'bg-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
-                            : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[#225851] dark:text-[#86CEC2]'
-                        }`}
-                      >
-                        <Volume2 className="w-3.5 h-3.5" />
-                        <span>US</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void speakEnglishText(currentCard.exampleEn, 'uk')}
-                        aria-label="Ouvir frase 1 em inglês britânico"
-                        title="Ouvir frase 1 em Inglês Britânico (UK)"
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                          isPlaying(currentCard.exampleEn, 'uk')
-                            ? 'bg-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
-                            : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[#225851] dark:text-[#86CEC2]'
-                        }`}
-                      >
-                        <Volume2 className="w-3.5 h-3.5" />
-                        <span>UK</span>
-                      </button>
-                    </div>
+                    <SentenceAudioButtons
+                      sentence={currentCard.exampleEn}
+                      indexLabel="1"
+                      activeAudio={activeAudio}
+                      speed={speechSpeed}
+                    />
                   </div>
 
                   <div className="flex items-start justify-between gap-3 rounded-2xl bg-[#FAF9F6] dark:bg-[#292D29] px-4 py-3">
@@ -469,43 +414,26 @@ export function StudyView({
                       </span>
                       <span>&ldquo;{secondExample.en}&rdquo;</span>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => void speakEnglishText(secondExample.en, 'us')}
-                        aria-label="Ouvir frase 2 em inglês americano"
-                        title="Ouvir frase 2 em Inglês Americano (US)"
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                          isPlaying(secondExample.en, 'us')
-                            ? 'bg-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
-                            : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[#225851] dark:text-[#86CEC2]'
-                        }`}
-                      >
-                        <Volume2 className="w-3.5 h-3.5" />
-                        <span>US</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void speakEnglishText(secondExample.en, 'uk')}
-                        aria-label="Ouvir frase 2 em inglês britânico"
-                        title="Ouvir frase 2 em Inglês Britânico (UK)"
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                          isPlaying(secondExample.en, 'uk')
-                            ? 'bg-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
-                            : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[#225851] dark:text-[#86CEC2]'
-                        }`}
-                      >
-                        <Volume2 className="w-3.5 h-3.5" />
-                        <span>UK</span>
-                      </button>
-                    </div>
+                    <SentenceAudioButtons
+                      sentence={secondExample.en}
+                      indexLabel="2"
+                      activeAudio={activeAudio}
+                      speed={speechSpeed}
+                    />
                   </div>
                 </div>
 
-                <p className="mt-4 text-center text-[11px] text-[#857F74] dark:text-[#8A857C] flex items-center justify-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleFlip();
+                  }}
+                  className="mt-4 mx-auto text-center text-[11px] text-[#857F74] dark:text-[#8A857C] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
                   <RotateCw className="w-3 h-3" />
                   <span>Clique no card ou pressione Espaço para ver a tradução real</span>
-                </p>
+                </button>
               </div>
 
               {/* BACK FACE */}
@@ -519,32 +447,11 @@ export function StudyView({
                     <span className="text-xs font-semibold text-[#28665E] dark:text-[#68B4A8]">
                       Como falamos no dia a dia
                     </span>
-                    <div
-                      className="flex items-center gap-2"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <span className="text-xs font-semibold text-[#5C574E] dark:text-[#BEB9AE]">
-                        {currentCard.term}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => void speakEnglishText(currentCard.term, 'us')}
-                        title="Ouvir em Inglês Americano (US)"
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#EAF3F1] dark:bg-[#1E312E] text-[11px] font-semibold text-[#225851] dark:text-[#86CEC2] whitespace-nowrap shrink-0 cursor-pointer"
-                      >
-                        <Volume2 className="w-3 h-3" />
-                        <span>US</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void speakEnglishText(currentCard.term, 'uk')}
-                        title="Ouvir em Inglês Britânico (UK)"
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#EAF3F1] dark:bg-[#1E312E] text-[11px] font-semibold text-[#225851] dark:text-[#86CEC2] whitespace-nowrap shrink-0 cursor-pointer"
-                      >
-                        <Volume2 className="w-3 h-3" />
-                        <span>UK</span>
-                      </button>
-                    </div>
+                    <BackFaceTermAudioControls
+                      term={currentCard.term}
+                      activeAudio={activeAudio}
+                      speed={speechSpeed}
+                    />
                   </div>
 
                   {/* Primary Colloquial Translation */}
@@ -574,7 +481,7 @@ export function StudyView({
                         US {phonetics.us}
                       </span>
                       <span aria-hidden="true">·</span>
-                      <span className="font-mono-num text-[#28665E] dark:text-[#68B4A8]">
+                      <span className="font-mono-num text-[#243B53] dark:text-[#9CC3E6]">
                         UK {phonetics.uk}
                       </span>
                     </div>
@@ -590,26 +497,14 @@ export function StudyView({
                         <p className="text-[#6B655C] dark:text-[#B9B4AA]">
                           01 · &ldquo;{currentCard.exampleEn}&rdquo;
                         </p>
-                        <div className="inline-flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => void speakEnglishText(currentCard.exampleEn, 'us')}
-                            aria-label="Ouvir frase 1 em inglês americano no verso"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#EAF3F1] dark:bg-[#1E312E] text-[10px] font-semibold text-[#225851] dark:text-[#86CEC2] hover:opacity-85 whitespace-nowrap shrink-0 cursor-pointer"
-                          >
-                            <Volume2 className="w-3 h-3" />
-                            <span>US</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void speakEnglishText(currentCard.exampleEn, 'uk')}
-                            aria-label="Ouvir frase 1 em inglês britânico no verso"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#EAF3F1] dark:bg-[#1E312E] text-[10px] font-semibold text-[#225851] dark:text-[#86CEC2] hover:opacity-85 whitespace-nowrap shrink-0 cursor-pointer"
-                          >
-                            <Volume2 className="w-3 h-3" />
-                            <span>UK</span>
-                          </button>
-                        </div>
+                        <SentenceAudioButtons
+                          sentence={currentCard.exampleEn}
+                          indexLabel="1"
+                          faceLabel="verso"
+                          compact
+                          activeAudio={activeAudio}
+                          speed={speechSpeed}
+                        />
                       </div>
                       <p className="font-semibold text-[#1C1B18] dark:text-[#EBE7DE]">
                         &rarr; {currentCard.examplePt}
@@ -620,26 +515,14 @@ export function StudyView({
                         <p className="text-[#6B655C] dark:text-[#B9B4AA]">
                           02 · &ldquo;{secondExample.en}&rdquo;
                         </p>
-                        <div className="inline-flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => void speakEnglishText(secondExample.en, 'us')}
-                            aria-label="Ouvir frase 2 em inglês americano no verso"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#EAF3F1] dark:bg-[#1E312E] text-[10px] font-semibold text-[#225851] dark:text-[#86CEC2] hover:opacity-85 whitespace-nowrap shrink-0 cursor-pointer"
-                          >
-                            <Volume2 className="w-3 h-3" />
-                            <span>US</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void speakEnglishText(secondExample.en, 'uk')}
-                            aria-label="Ouvir frase 2 em inglês britânico no verso"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#EAF3F1] dark:bg-[#1E312E] text-[10px] font-semibold text-[#225851] dark:text-[#86CEC2] hover:opacity-85 whitespace-nowrap shrink-0 cursor-pointer"
-                          >
-                            <Volume2 className="w-3 h-3" />
-                            <span>UK</span>
-                          </button>
-                        </div>
+                        <SentenceAudioButtons
+                          sentence={secondExample.en}
+                          indexLabel="2"
+                          faceLabel="verso"
+                          compact
+                          activeAudio={activeAudio}
+                          speed={speechSpeed}
+                        />
                       </div>
                       <p className="font-semibold text-[#1C1B18] dark:text-[#EBE7DE]">
                         &rarr; {secondExample.pt}
@@ -660,13 +543,24 @@ export function StudyView({
                       {phonetics.ukVariantTerm && (
                         <button
                           type="button"
+                          aria-pressed={isPlaying(phonetics.ukVariantTerm, 'uk')}
                           onClick={() =>
-                            void speakEnglishText(phonetics.ukVariantTerm as string, 'uk')
+                            void toggleSpeakEnglishText(phonetics.ukVariantTerm as string, 'uk', {
+                              speed: speechSpeed,
+                            })
                           }
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#28665E] hover:bg-[#1F524B] text-white dark:bg-[#2A6D63] dark:hover:bg-[#327D72] dark:text-[#F4F7F6] text-[11px] font-semibold whitespace-nowrap shrink-0 cursor-pointer"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#243B53] hover:bg-[#1B2D40] text-white dark:bg-[#2E4C6B] dark:hover:bg-[#375A7F] dark:text-[#F4F7F8] text-[11px] font-semibold whitespace-nowrap shrink-0 cursor-pointer"
                         >
-                          <Volume2 className="w-3 h-3" />
-                          <span>Ouvir variante UK</span>
+                          {isPlaying(phonetics.ukVariantTerm, 'uk') ? (
+                            <AudioWaveIcon className="w-3 h-3" />
+                          ) : (
+                            <Volume2 className="w-3 h-3" />
+                          )}
+                          <span>
+                            {isPlaying(phonetics.ukVariantTerm, 'uk')
+                              ? 'Ouvindo variante UK...'
+                              : 'Ouvir variante UK'}
+                          </span>
                         </button>
                       )}
                     </div>
@@ -681,12 +575,19 @@ export function StudyView({
                   )}
                 </div>
 
-                <p className="mt-3 text-center text-[11px] text-[#857F74] dark:text-[#8A857C] flex items-center justify-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleFlip();
+                  }}
+                  className="mt-3 mx-auto text-center text-[11px] text-[#857F74] dark:text-[#8A857C] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
                   <RotateCw className="w-3 h-3" />
                   <span>Clique para voltar à frente</span>
-                </p>
+                </button>
               </div>
-            </div>
+            </article>
           </div>
 
           {/* Bottom Decision & Navigation Controls */}
