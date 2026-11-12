@@ -57,11 +57,12 @@ jobs:
           KEYSTORE_FILE="$RUNNER_TEMP/ewm-release.p12"
           if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ]; then
             echo "$ANDROID_KEYSTORE_BASE64" | tr -d ' \n\r' | base64 --decode > "$KEYSTORE_FILE"
-            if keytool -list -keystore "$KEYSTORE_FILE" -storepass "$ANDROID_KEYSTORE_PASSWORD" >/dev/null 2>&1; then
+            DETECTED_ALIAS=$(keytool -J-Duser.language=en -list -v -keystore "$KEYSTORE_FILE" -storepass "$ANDROID_KEYSTORE_PASSWORD" 2>/dev/null | awk '/^Alias name:/ {sub(/^Alias name:[[:space:]]*/, ""); a=$0} /PrivateKeyEntry/ {print a; exit}')
+            if [ -n "$DETECTED_ALIAS" ]; then
               echo "Using persistent repository release keystore."
               echo "EWM_KEYSTORE_PATH=$KEYSTORE_FILE" >> "$GITHUB_ENV"
               echo "EWM_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-              echo "EWM_KEY_ALIAS=${ANDROID_KEY_ALIAS:-ewm-release}" >> "$GITHUB_ENV"
+              echo "EWM_KEY_ALIAS=$DETECTED_ALIAS" >> "$GITHUB_ENV"
               echo "EWM_KEY_PASSWORD=${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}" >> "$GITHUB_ENV"
               exit 0
             fi

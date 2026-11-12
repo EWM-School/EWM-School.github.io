@@ -5,6 +5,28 @@ def keystorePassword = System.getenv("EWM_KEYSTORE_PASSWORD")
 def keyAliasName = System.getenv("EWM_KEY_ALIAS")
 def keyAliasPassword = System.getenv("EWM_KEY_PASSWORD")
 def hasReleaseKeystore = keystorePath != null && !keystorePath.trim().isEmpty() && file(keystorePath).exists()
+def resolvedKeyAlias = keyAliasName
+
+if (hasReleaseKeystore && keystorePassword != null) {
+    try {
+        def ks = java.security.KeyStore.getInstance("PKCS12")
+        file(keystorePath).withInputStream { stream ->
+            ks.load(stream, keystorePassword.toCharArray())
+        }
+        if (resolvedKeyAlias == null || resolvedKeyAlias.trim().isEmpty() || !ks.isKeyEntry(resolvedKeyAlias)) {
+            def aliases = ks.aliases()
+            while (aliases.hasMoreElements()) {
+                def candidate = aliases.nextElement()
+                if (ks.isKeyEntry(candidate)) {
+                    resolvedKeyAlias = candidate
+                    break
+                }
+            }
+        }
+    } catch (Exception e) {
+        logger.warn("Keystore alias auto-detection warning: " + e.getMessage())
+    }
+}
 
 android {
     namespace = "com.ewm.keeppracticing"
@@ -27,7 +49,7 @@ android {
             release {
                 storeFile file(keystorePath)
                 storePassword keystorePassword
-                keyAlias keyAliasName
+                keyAlias resolvedKeyAlias
                 keyPassword keyAliasPassword
                 enableV1Signing true
                 enableV2Signing true
