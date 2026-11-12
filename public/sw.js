@@ -1,8 +1,8 @@
 // Hybrid Offline-First Service Worker (Web / GitHub Pages / Desktop PWA)
 // Scope-relative (`self.registration.scope`) so it works identically at `/` and `/<repo-name>/`.
 
-const SHELL_CACHE = 'ewm-hybrid-shell-v8';
-const RUNTIME_CACHE = 'ewm-hybrid-assets-v8';
+const SHELL_CACHE = 'ewm-hybrid-shell-v9';
+const RUNTIME_CACHE = 'ewm-hybrid-assets-v9';
 
 const RELATIVE_SHELL_ASSETS = [
   './',

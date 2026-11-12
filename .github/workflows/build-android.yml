@@ -1,4 +1,4 @@
-name: Build & Publish Android APK
+name: Build & Publish Android APK + AAB
 
 on:
   push:
@@ -9,11 +9,11 @@ permissions:
   contents: write
 
 concurrency:
-  group: 'android-apk-release'
+  group: 'android-apk-aab-release'
   cancel-in-progress: true
 
 jobs:
-  build-apk:
+  build-android:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -46,7 +46,7 @@ jobs:
           npm run build
           npx cap sync android
 
-      - name: Prepare Release Keystore (Persistent Secret with Self-Healing Fallback)
+      - name: Prepare Release Keystore & Verify SHA-1 / SHA-256 Fingerprints
         id: keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -59,7 +59,8 @@ jobs:
             echo "$ANDROID_KEYSTORE_BASE64" | tr -d ' \n\r' | base64 --decode > "$KEYSTORE_FILE"
             DETECTED_ALIAS=$(keytool -J-Duser.language=en -list -v -keystore "$KEYSTORE_FILE" -storepass "$ANDROID_KEYSTORE_PASSWORD" 2>/dev/null | awk '/^Alias name:/ {sub(/^Alias name:[[:space:]]*/, ""); a=$0} /PrivateKeyEntry/ {print a; exit}')
             if [ -n "$DETECTED_ALIAS" ]; then
-              echo "Using persistent repository release keystore."
+              echo "Using persistent Organization release keystore."
+              keytool -J-Duser.language=en -list -v -keystore "$KEYSTORE_FILE" -storepass "$ANDROID_KEYSTORE_PASSWORD" | grep -E "SHA1:|SHA256:" || true
               echo "EWM_KEYSTORE_PATH=$KEYSTORE_FILE" >> "$GITHUB_ENV"
               echo "EWM_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
               echo "EWM_KEY_ALIAS=$DETECTED_ALIAS" >> "$GITHUB_ENV"
@@ -70,7 +71,7 @@ jobs:
 
           echo "Generating fallback PKCS12 distribution keystore via keytool..."
           rm -f "$KEYSTORE_FILE"
-          FALLBACK_PASS="EwmKeepPracticingRelease2026!"
+          FALLBACK_PASS="EwmSchoolKeepPracticing2026Key!"
           keytool -genkeypair -v \
             -keystore "$KEYSTORE_FILE" \
             -storetype PKCS12 \
@@ -80,56 +81,63 @@ jobs:
             -validity 10000 \
             -storepass "$FALLBACK_PASS" \
             -keypass "$FALLBACK_PASS" \
-            -dname "CN=EWM Keep Practicing, OU=Mobile, O=English With Mariana, L=Sao Paulo, ST=SP, C=BR"
+            -dname "CN=EWM Keep Practicing, OU=Mobile, O=EWM School, L=Sao Paulo, ST=SP, C=BR"
           echo "EWM_KEYSTORE_PATH=$KEYSTORE_FILE" >> "$GITHUB_ENV"
           echo "EWM_KEYSTORE_PASSWORD=$FALLBACK_PASS" >> "$GITHUB_ENV"
           echo "EWM_KEY_ALIAS=ewm-release" >> "$GITHUB_ENV"
           echo "EWM_KEY_PASSWORD=$FALLBACK_PASS" >> "$GITHUB_ENV"
 
-      - name: Compile Signed Android Release APK
+      - name: Compile Signed Release APK & Play Store App Bundle (.AAB)
         working-directory: android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease bundleRelease --no-daemon
 
-      - name: Stage EWM-Keep-Practicing.apk
+      - name: Stage Signed EWM-Keep-Practicing.apk & EWM-Keep-Practicing.aab
         run: |
           APK_SOURCE=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          AAB_SOURCE=$(find android/app/build/outputs/bundle/release -name "*.aab" | head -n 1)
           if [ -z "$APK_SOURCE" ]; then
             echo "Error: Release APK not found!"
             exit 1
           fi
+          if [ -z "$AAB_SOURCE" ]; then
+            echo "Error: Release AAB not found!"
+            exit 1
+          fi
           cp "$APK_SOURCE" ./EWM-Keep-Practicing.apk
-          ls -lh ./EWM-Keep-Practicing.apk
+          cp "$AAB_SOURCE" ./EWM-Keep-Practicing.aab
+          jarsigner -verify ./EWM-Keep-Practicing.aab
+          ls -lh ./EWM-Keep-Practicing.apk ./EWM-Keep-Practicing.aab
 
-      - name: Upload APK Artifact to Workflow Run
+      - name: Upload APK & AAB Artifacts to Workflow Run
         uses: actions/upload-artifact@v4
         with:
-          name: EWM-Keep-Practicing-apk
-          path: ./EWM-Keep-Practicing.apk
+          name: EWM-Keep-Practicing-Android-Release
+          path: |
+            ./EWM-Keep-Practicing.apk
+            ./EWM-Keep-Practicing.aab
           retention-days: 30
 
-      - name: Publish / Update Official Latest GitHub Release
+      - name: Publish / Update Official Latest GitHub Release (APK + AAB)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="v1.1.0"
-          TITLE="EWM · Keep practicing — Instalador Oficial Android ($TAG)"
-          NOTES=$(cat <<'EOF'
-          ### 📱 EWM · Keep practicing — Aplicativo Oficial Android (.APK)
+          APP_VER=$(node -p "require('./package.json').version")
+          TAG="v${APP_VER}"
+          TITLE="EWM · Keep practicing — Release Oficial Mobile ($TAG)"
+          NOTES=$(cat <<EOF
+          ### 📱 EWM · Keep practicing — Aplicativo Oficial ($TAG)
 
-          Instalador nativo híbrido compilado automaticamente a partir da branch `main`:
-          - **Áudio Nativo US & UK:** Motor TTS Android dedicado (`en-US` e `en-GB`) com normalização fonética RP.
-          - **100% Offline-First:** Progresso, criação de flashcards, baralhos e pontuação do Quiz salvos localmente com sincronização automática em nuvem.
-          - **Gamificação Tátil & Lembretes:** Vibração háptica nos acertos/giros e notificações locais diárias de estudo.
-
-          **Download Direto:** Clique em **`EWM-Keep-Practicing.apk`** abaixo e confirme a instalação no seu smartphone Android.
+          Pacotes oficiais assinados compilados automaticamente em **https://ewm-school.github.io/**:
+          - **\`EWM-Keep-Practicing.apk\`** — Instalador direto para smartphones Android (com ícone oficial EWM, Splash Screen nativa, vozes US/UK nativas, vibração tátil e modo 100% Offline-First).
+          - **\`EWM-Keep-Practicing.aab\`** — Pacote *Android App Bundle* assinado pronto para publicação no **Google Play Console**.
           EOF
           )
 
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" ./EWM-Keep-Practicing.apk --clobber
+            gh release upload "$TAG" ./EWM-Keep-Practicing.apk ./EWM-Keep-Practicing.aab --clobber
             gh release edit "$TAG" --latest --draft=false --prerelease=false --title "$TITLE" --notes "$NOTES"
           else
-            gh release create "$TAG" ./EWM-Keep-Practicing.apk --latest --title "$TITLE" --notes "$NOTES"
+            gh release create "$TAG" ./EWM-Keep-Practicing.apk ./EWM-Keep-Practicing.aab --latest --title "$TITLE" --notes "$NOTES"
           fi

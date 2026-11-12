@@ -14,34 +14,14 @@ import {
   X,
 } from 'lucide-react';
 import QRCode from 'qrcode';
+import {
+  APP_VERSION,
+  OFFICIAL_ANDROID_APK_URL,
+  OFFICIAL_CANONICAL_WEB_URL,
+  OFFICIAL_LATEST_RELEASE_PAGE_URL,
+  resolveDynamicMobileDownloadUrl,
+} from '../config/appReleaseConfig';
 import { usePWAInstall } from '../hooks/usePWAInstall';
-
-export const OFFICIAL_ANDROID_APK_URL =
-  'https://github.com/igor765rs/EWM-Keep-practicing/releases/latest/download/EWM-Keep-Practicing.apk';
-
-export const OFFICIAL_WEB_APP_URL =
-  'https://igor765rs.github.io/EWM-Keep-practicing/';
-
-function resolvePublicMobileEntryUrl(): string {
-  if (typeof window === 'undefined') {
-    return `${OFFICIAL_WEB_APP_URL}?download=1`;
-  }
-  const { protocol, hostname, origin, pathname } = window.location;
-  const isLocalOrNative =
-    protocol !== 'https:' ||
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname.endsWith('.local');
-
-  if (isLocalOrNative) {
-    return `${OFFICIAL_WEB_APP_URL}?download=1`;
-  }
-
-  const normalizedPath = pathname.endsWith('/')
-    ? pathname
-    : pathname.replace(/\/index\.html$/i, '/');
-  return `${origin}${normalizedPath}?download=1`;
-}
 
 interface DownloadAppModalProps {
   isOpen: boolean;
@@ -62,7 +42,7 @@ export function DownloadAppModal({
   const [copiedLink, setCopiedLink] = useState(false);
   const [installingPwa, setInstallingPwa] = useState(false);
 
-  const mobileSmartUrl = useMemo(() => resolvePublicMobileEntryUrl(), []);
+  const mobileSmartUrl = useMemo(() => resolveDynamicMobileDownloadUrl(), []);
   const activeQrUrl =
     qrMode === 'direct_apk' ? OFFICIAL_ANDROID_APK_URL : mobileSmartUrl;
 
@@ -113,10 +93,10 @@ export function DownloadAppModal({
     try {
       await navigator.clipboard.writeText(mobileSmartUrl);
       setCopiedLink(true);
-      onNotify?.('Link de download copiado para enviar ao celular!');
+      onNotify?.('Link oficial copiado para enviar ao celular!');
       window.setTimeout(() => setCopiedLink(false), 2400);
     } catch {
-      onNotify?.(`Acesse no celular: ${OFFICIAL_WEB_APP_URL}`);
+      onNotify?.(`Acesse no celular: ${OFFICIAL_CANONICAL_WEB_URL}`);
     }
   };
 
@@ -158,7 +138,7 @@ export function DownloadAppModal({
             <div className="min-w-0">
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#EAF3F1] dark:bg-[#1E312E] text-[#28665E] dark:text-[#68B4A8] text-[11px] font-bold tracking-wide uppercase mb-1">
                 <Smartphone className="w-3 h-3" />
-                <span>App Oficial Mobile &amp; Offline</span>
+                <span>App Oficial EWM · v{APP_VERSION}</span>
               </div>
               <h2
                 id="ewm-download-modal-title"
@@ -182,7 +162,7 @@ export function DownloadAppModal({
           </button>
         </div>
 
-        {/* Main 2-Column Layout: Left = Dynamic QR Code (PC -> Mobile), Right = Android APK + iOS/PWA */}
+        {/* Main 2-Column Layout: Left = Dynamic Client-Side QR Code (PC -> Mobile), Right = Android APK + iOS/PWA */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch">
           {/* Column 1: Dynamic QR Code Card */}
           <div className="md:col-span-5 rounded-2xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#171A17] p-4 sm:p-5 flex flex-col items-center justify-between text-center space-y-3.5">
@@ -192,7 +172,7 @@ export function DownloadAppModal({
                 <span>No computador? Aponte a câmera</span>
               </div>
               <p className="text-[11px] text-[#6B655C] dark:text-[#9E998F] leading-snug">
-                Escaneie com a câmera do Android ou iPhone para abrir direto na tela de instalação.
+                QR Code gerado localmente (funciona até offline) apontando direto para a instalação no celular.
               </p>
             </div>
 
@@ -250,7 +230,7 @@ export function DownloadAppModal({
               ) : (
                 <>
                   <Copy className="w-3.5 h-3.5" />
-                  <span>Copiar link para mandar no WhatsApp</span>
+                  <span>Copiar link oficial para enviar</span>
                 </>
               )}
             </button>
@@ -264,10 +244,10 @@ export function DownloadAppModal({
                 <div className="space-y-0.5">
                   <div className="inline-flex items-center gap-1.5 text-xs font-bold text-[#225851] dark:text-[#86CEC2]">
                     <ShieldCheck className="w-4 h-4 shrink-0" />
-                    <span>Android • Instalador Nativo Oficial (.APK)</span>
+                    <span>Android • Instalador Nativo Assinado (.APK)</span>
                   </div>
                   <p className="text-xs text-[#524E46] dark:text-[#B9B4AA] leading-relaxed">
-                    Baixe direto no smartphone Android ou salve no computador para transferir. Inclui motor TTS nativo US/UK e lembretes locais.
+                    Baixe direto no smartphone Android ou salve no computador para transferir. Com ícone oficial EWM, motor TTS nativo US/UK e lembretes locais.
                   </p>
                 </div>
               </div>
@@ -286,7 +266,7 @@ export function DownloadAppModal({
                 <Download className="w-4 h-4 shrink-0" />
                 <span>Baixar APK para Android</span>
                 <span className="text-[11px] font-mono-num bg-white/15 px-2 py-0.5 rounded-md">
-                  latest
+                  v{APP_VERSION}
                 </span>
               </a>
 
@@ -295,7 +275,7 @@ export function DownloadAppModal({
                   Dica Android: toque no arquivo baixado e confirme <strong>Instalar</strong>.
                 </span>
                 <a
-                  href="https://github.com/igor765rs/EWM-Keep-practicing/releases/latest"
+                  href={OFFICIAL_LATEST_RELEASE_PAGE_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 font-semibold text-[#28665E] dark:text-[#68B4A8] hover:underline"

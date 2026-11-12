@@ -4,5 +4,4 @@
     <string name="title_activity_main">EWM - Keep practicing</string>
     <string name="package_name">com.ewm.keeppracticing</string>
     <string name="custom_url_scheme">com.ewm.keeppracticing</string>
-    <string name="default_web_client_id" translatable="false">1032022272683-p1eg52g15g16hmbome8frsjnldatuv4v.apps.googleusercontent.com</string>
 </resources>

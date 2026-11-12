@@ -7,6 +7,7 @@ import { Header } from './components/Header';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { StudyReminderModal } from './components/StudyReminderModal';
 import { StudyView } from './components/StudyView';
+import { UpdateAvailableBanner } from './components/UpdateAvailableBanner';
 import {
   DEFAULT_STARTER_STUDY_IDS,
   INITIAL_CARDS,
@@ -25,6 +26,9 @@ import {
   type User,
 } from './services/firebase';
 import {
+  applyOneClickAppUpdate,
+  checkForAppReleaseUpdate,
+  dismissReleaseUpdateTag,
   formatAuthErrorPtBr,
   isAuthUserCancelled,
   loadStudyReminderConfig,
@@ -41,6 +45,7 @@ import {
   triggerFlip,
   triggerSuccess,
   triggerTap,
+  type AppUpdateInfo,
 } from './services/platform';
 import {
   clearAllUserOfflineDataOnAccountDelete,
@@ -231,6 +236,7 @@ export default function App() {
   const [pendingDeleteDeck, setPendingDeleteDeck] = useState<UserDeck | null>(null);
 
   const [userStats, setUserStats] = useState<UserStudyStats>(initialLegacy.studyStats);
+  const [availableUpdate, setAvailableUpdate] = useState<AppUpdateInfo | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const toastTimerRef = useRef<number | null>(null);
@@ -269,6 +275,12 @@ export default function App() {
       if (mounted) setReminderEnabled(cfg.enabled);
     });
 
+    const updateTimer = window.setTimeout(() => {
+      void checkForAppReleaseUpdate().then((info) => {
+        if (mounted && info) setAvailableUpdate(info);
+      });
+    }, 1800);
+
     void hydrateOfflineDatabase().then((hydrated) => {
       if (!mounted) return;
       if (hydrated.globalCards.length > 0) {
@@ -303,6 +315,7 @@ export default function App() {
 
     return () => {
       mounted = false;
+      window.clearTimeout(updateTimer);
       unsubSync();
       stopReminderWatcher();
       stopEngine();
@@ -396,6 +409,9 @@ export default function App() {
       },
       onAppForeground: () => {
         void flushSyncQueue(true);
+        void checkForAppReleaseUpdate().then((info) => {
+          if (info) setAvailableUpdate(info);
+        });
       },
     });
   }, []);
@@ -1881,6 +1897,19 @@ export default function App() {
         tone="danger"
         onConfirm={handleConfirmDeleteDeck}
         onCancel={() => setPendingDeleteDeck(null)}
+      />
+
+      {/* Automatic Non-Intrusive Update Notification Banner */}
+      <UpdateAvailableBanner
+        update={availableUpdate}
+        onApplyUpdate={(upd) => {
+          showToast(`Iniciando atualização para ${upd.tagName}...`);
+          void applyOneClickAppUpdate(upd);
+        }}
+        onDismiss={(tagName) => {
+          dismissReleaseUpdateTag(tagName);
+          setAvailableUpdate(null);
+        }}
       />
 
       {/* Toast Notification (respecting Bottom Nav & Safe Area on Mobile) */}
