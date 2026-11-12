@@ -84,7 +84,10 @@ import type {
   TopicFolder,
   UserDeck,
 } from './types/flashcard';
-import { shouldSkipCoverFromSearch } from './utils/coverHelpers';
+import {
+  shouldOpenDownloadFromSearch,
+  shouldSkipCoverFromSearch,
+} from './utils/coverHelpers';
 import {
   computeFolderAndSubtopicCounts,
   filterListCards,
@@ -130,6 +133,11 @@ const LazyPhoneticGrammarModal = lazy(() =>
 const LazyMonthlyRankingModal = lazy(() =>
   import('./components/MonthlyRankingModal').then((m) => ({
     default: m.MonthlyRankingModal,
+  }))
+);
+const LazyDownloadAppModal = lazy(() =>
+  import('./components/DownloadAppModal').then((m) => ({
+    default: m.DownloadAppModal,
   }))
 );
 
@@ -213,6 +221,10 @@ export default function App() {
   const [phoneticModalOpen, setPhoneticModalOpen] = useState(false);
   const [rankingModalOpen, setRankingModalOpen] = useState(false);
   const [reminderModalOpen, setReminderModalOpen] = useState(false);
+  const [downloadModalOpen, setDownloadModalOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return shouldOpenDownloadFromSearch(window.location.search);
+  });
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [pendingDeleteCard, setPendingDeleteCard] = useState<Flashcard | null>(null);
@@ -301,6 +313,7 @@ export default function App() {
   const navStateRef = useRef({
     authModalOpen,
     reminderModalOpen,
+    downloadModalOpen,
     cardModalOpen,
     adminModalOpen,
     phoneticModalOpen,
@@ -314,6 +327,7 @@ export default function App() {
   navStateRef.current = {
     authModalOpen,
     reminderModalOpen,
+    downloadModalOpen,
     cardModalOpen,
     adminModalOpen,
     phoneticModalOpen,
@@ -335,6 +349,10 @@ export default function App() {
         }
         if (s.pendingDeleteDeck) {
           setPendingDeleteDeck(null);
+          return true;
+        }
+        if (s.downloadModalOpen) {
+          setDownloadModalOpen(false);
           return true;
         }
         if (s.authModalOpen) {
@@ -1498,6 +1516,7 @@ export default function App() {
           onOpenRankingModal={() => setRankingModalOpen(true)}
           onOpenAuthModal={() => setAuthModalOpen(true)}
           onOpenReminderModal={() => setReminderModalOpen(true)}
+          onOpenDownloadModal={() => setDownloadModalOpen(true)}
           onSignInAndEnter={() => void handleGoogleSignInAndEnter()}
           onSignOut={() => void handleSignOut()}
           onEnterApp={handleEnterFromCover}
@@ -1516,6 +1535,7 @@ export default function App() {
             onToggleFocusMode={() => setFocusMode((v) => !v)}
             onOpenPhoneticGuide={() => setPhoneticModalOpen(true)}
             onOpenReminderModal={() => setReminderModalOpen(true)}
+            onOpenDownloadModal={() => setDownloadModalOpen(true)}
             reminderEnabled={reminderEnabled}
             onOpenNewCard={handleOpenNewCustomCard}
             totalCards={cards.length}
@@ -1782,6 +1802,26 @@ export default function App() {
             stats={userStats}
             userDisplayName={currentUser?.displayName || null}
             onUpdateGoal={handleUpdateGoal}
+          />
+        </Suspense>
+      )}
+
+      {downloadModalOpen && (
+        <Suspense fallback={null}>
+          <LazyDownloadAppModal
+            isOpen={downloadModalOpen}
+            onClose={() => {
+              setDownloadModalOpen(false);
+              if (
+                typeof window !== 'undefined' &&
+                shouldOpenDownloadFromSearch(window.location.search)
+              ) {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('download');
+                window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+              }
+            }}
+            onNotify={showToast}
           />
         </Suspense>
       )}

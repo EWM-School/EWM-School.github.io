@@ -5,6 +5,7 @@ import {
   BookOpen,
   CheckCircle2,
   Cloud,
+  Download,
   FolderKanban,
   HelpCircle,
   Home,
@@ -20,6 +21,7 @@ import {
   UserRound,
   WifiOff,
 } from 'lucide-react';
+import { isNativeMobile } from '../services/platform/platformInfo';
 import type { AppTab, SyncStatus, ThemeMode } from '../types/flashcard';
 
 interface HeaderProps {
@@ -32,6 +34,7 @@ interface HeaderProps {
   onToggleFocusMode: () => void;
   onOpenPhoneticGuide: () => void;
   onOpenReminderModal: () => void;
+  onOpenDownloadModal: () => void;
   reminderEnabled: boolean;
   onOpenNewCard: () => void;
   totalCards: number;
@@ -57,6 +60,7 @@ export const Header = memo(function Header({
   onToggleFocusMode,
   onOpenPhoneticGuide,
   onOpenReminderModal,
+  onOpenDownloadModal,
   reminderEnabled,
   onOpenNewCard,
   totalCards,
@@ -198,6 +202,19 @@ export const Header = memo(function Header({
               <Home className="w-3.5 h-3.5" />
               <span className="hidden xl:inline">Capa</span>
             </button>
+
+            {!isNativeMobile() && (
+              <button
+                type="button"
+                onClick={onOpenDownloadModal}
+                title="Baixar aplicativo EWM no celular (QR Code, APK Android ou iPhone)"
+                aria-label="Baixar aplicativo EWM no celular"
+                className="min-h-[48px] lg:min-h-[36px] inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl border border-[#C6DBD7] dark:border-[#2F4B46] bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[#225851] dark:text-[#86CEC2] text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <Download className="w-4 h-4 lg:w-3.5 lg:h-3.5 shrink-0" />
+                <span className="hidden xl:inline">Download</span>
+              </button>
+            )}
 
             {isAdmin && (
               <button

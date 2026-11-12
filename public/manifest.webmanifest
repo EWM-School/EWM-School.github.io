@@ -2,16 +2,17 @@
   "id": "./",
   "name": "EWM - Keep practicing",
   "short_name": "EWM",
-  "description": "Flashcards interativos de inglês coloquial, phrasal verbs, pronúncia americana e britânica nativa e dicas práticas da Teacher Mariana para falantes de português.",
+  "description": "Flashcards interativos de inglês coloquial, phrasal verbs, pronúncia americana (US) e britânica (UK) nativa, Modo Quiz e estudo 100% offline da Teacher Mariana.",
   "lang": "pt-BR",
   "dir": "ltr",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "any",
-  "background_color": "#FFFFFF",
+  "background_color": "#F6F4EF",
   "theme_color": "#28665E",
-  "categories": ["education"],
+  "categories": ["education", "productivity"],
   "icons": [
     {
       "src": "./apple-touch-icon-180x180.png",
@@ -42,6 +43,22 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Praticar Flashcards",
+      "short_name": "Flashcards",
+      "description": "Continuar rodada de flashcards US e UK",
+      "url": "./?study=1",
+      "icons": [{ "src": "./pwa-192x192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Baixar App no Celular",
+      "short_name": "Download",
+      "description": "Abrir instalador Android (.apk) e guia iPhone",
+      "url": "./?download=1",
+      "icons": [{ "src": "./pwa-192x192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]
 }

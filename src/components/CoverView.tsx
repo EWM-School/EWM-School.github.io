@@ -3,16 +3,19 @@ import {
   ArrowRight,
   Bell,
   CheckCircle2,
+  Download,
   FolderKanban,
   LogOut,
   Mail,
   Moon,
+  QrCode,
   Settings,
   Shield,
   Sun,
   WifiOff,
 } from 'lucide-react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
+import { isNativeMobile } from '../services/platform/platformInfo';
 import type { AppTab, SyncStatus, ThemeMode } from '../types/flashcard';
 import {
   computeProgressMetrics,
@@ -80,6 +83,7 @@ interface CoverViewProps {
   onOpenRankingModal: () => void;
   onOpenAuthModal: () => void;
   onOpenReminderModal: () => void;
+  onOpenDownloadModal: () => void;
   onSignInAndEnter: () => void;
   onSignOut: () => void;
   onEnterApp: (targetTab?: AppTab) => void;
@@ -105,6 +109,7 @@ export const CoverView = memo(function CoverView({
   onOpenRankingModal,
   onOpenAuthModal,
   onOpenReminderModal,
+  onOpenDownloadModal,
   onSignInAndEnter,
   onSignOut,
   onEnterApp,
@@ -113,6 +118,7 @@ export const CoverView = memo(function CoverView({
 }: CoverViewProps) {
   const [portraitFailed, setPortraitFailed] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
+  const nativeApp = isNativeMobile();
 
   const isLoggedIn = Boolean(userEmail || userDisplayName);
   const firstName = formatStudentFirstName(userDisplayName, userEmail);
@@ -205,13 +211,26 @@ export const CoverView = memo(function CoverView({
             </button>
           </nav>
 
-          {/* Zone 3: Live Ranking Button + Primary Action */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Zone 3: Live Ranking Button + Download App + Primary Action */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             <TopStudentsCoverPodium
               stats={stats}
               userDisplayName={userDisplayName}
               onOpenRankingModal={onOpenRankingModal}
             />
+
+            {!nativeApp && (
+              <button
+                type="button"
+                onClick={onOpenDownloadModal}
+                title="Baixar aplicativo EWM no celular (QR Code, APK Android ou iPhone)"
+                aria-label="Baixar aplicativo EWM no celular"
+                className="min-h-[48px] lg:min-h-[43px] inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 rounded-xl border border-[#28665E]/45 dark:border-[#68B4A8]/50 bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#26403C] text-[#1E4E47] dark:text-[#86CEC2] text-xs sm:text-sm font-semibold shadow-2xs transition-all duration-200 cursor-pointer select-none shrink-0"
+              >
+                <Download className="w-4 h-4 shrink-0" />
+                <span className="hidden sm:inline">Download</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -598,6 +617,27 @@ export const CoverView = memo(function CoverView({
                     </div>
                   </div>
                 )}
+
+                {!nativeApp && (
+                  <div className="mt-3 pt-3 border-t border-[#ECE8DF] dark:border-[#2A2F2A]">
+                    <button
+                      type="button"
+                      onClick={onOpenDownloadModal}
+                      className="w-full min-h-[44px] flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl border border-[#C6DBD7] dark:border-[#2F4B46] bg-[#F2F8F7] hover:bg-[#E4F2EF] dark:bg-[#192825] dark:hover:bg-[#20332F] text-[#1E4E47] dark:text-[#86CEC2] text-xs sm:text-[13px] font-semibold transition-colors cursor-pointer group"
+                    >
+                      <span className="inline-flex items-center gap-2 min-w-0">
+                        <Download className="w-4 h-4 shrink-0 text-[#28665E] dark:text-[#68B4A8]" />
+                        <span className="truncate">
+                          Download no Celular · APK Android, QR Code &amp; iPhone
+                        </span>
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-mono-num px-2 py-0.5 rounded-lg bg-white/80 dark:bg-[#243834] text-[#28665E] dark:text-[#86CEC2] shrink-0">
+                        <QrCode className="w-3.5 h-3.5" />
+                        <span>Instalar</span>
+                      </span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -753,7 +793,7 @@ export const CoverView = memo(function CoverView({
             >
               Guia Fonético
             </button>
-            <PWAInstallButton />
+            <PWAInstallButton onOpenDownloadModal={onOpenDownloadModal} />
           </div>
         </div>
       </footer>

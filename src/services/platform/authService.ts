@@ -120,6 +120,9 @@ export function formatAuthErrorPtBr(error: unknown): string {
   if (raw.includes('auth/requires-recent-login')) {
     return 'Por segurança, confirme sua credencial novamente para concluir a exclusão da conta.';
   }
+  if (raw.includes('10:') || raw.includes('DEVELOPER_ERROR')) {
+    return 'No aplicativo Android, utilize a opção "Entrar com E-mail" ou continue no Modo Visitante Offline enquanto o certificado Google Play está em homologação.';
+  }
   return 'Não foi possível concluir a autenticação agora. Tente novamente.';
 }
 

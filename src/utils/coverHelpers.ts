@@ -1,13 +1,24 @@
 export const MAX_CUSTOM_PHOTO_DATA_URL_LENGTH = 950_000;
 
 /**
- * Checks whether the URL search string requests skipping the cover screen (?autostart=1).
+ * Checks whether the URL search string requests skipping the cover screen (?autostart=1 or ?study=1).
  */
 export function shouldSkipCoverFromSearch(search: string): boolean {
   if (!search) return false;
   const normalized = search.startsWith('?') ? search.slice(1) : search;
   const params = new URLSearchParams(normalized);
-  const val = params.get('autostart');
+  const val = params.get('autostart') || params.get('study');
+  return val === '1' || val === 'true';
+}
+
+/**
+ * Checks whether the URL search string requests opening the mobile Download modal (?download=1).
+ */
+export function shouldOpenDownloadFromSearch(search: string): boolean {
+  if (!search) return false;
+  const normalized = search.startsWith('?') ? search.slice(1) : search;
+  const params = new URLSearchParams(normalized);
+  const val = params.get('download');
   return val === '1' || val === 'true';
 }
 

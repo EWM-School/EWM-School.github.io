@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Bookmark, Share, Smartphone, X } from 'lucide-react';
+import { Bookmark, Download, Share, Smartphone, X } from 'lucide-react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 
-export function PWAInstallButton() {
+interface PWAInstallButtonProps {
+  onOpenDownloadModal?: () => void;
+}
+
+export function PWAInstallButton({ onOpenDownloadModal }: PWAInstallButtonProps) {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showGuideModal, setShowGuideModal] = useState(false);
 
@@ -17,11 +21,11 @@ export function PWAInstallButton() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showGuideModal]);
 
-  if (isInstalled) {
-    return null;
-  }
-
   const handleActionClick = async () => {
+    if (onOpenDownloadModal) {
+      onOpenDownloadModal();
+      return;
+    }
     if (isInstallable) {
       const accepted = await install();
       if (accepted) return;
@@ -34,11 +38,11 @@ export function PWAInstallButton() {
       <button
         type="button"
         onClick={handleActionClick}
-        className="inline-flex items-center gap-1.5 hover:text-[#1C1B18] dark:hover:text-[#EBE7DE] transition-colors cursor-pointer"
-        title="Adicionar atalho com o ícone EWM na tela inicial do celular ou nos favoritos"
+        className="inline-flex items-center gap-1.5 font-semibold text-[#28665E] dark:text-[#68B4A8] hover:underline underline-offset-4 transition-colors cursor-pointer"
+        title="Baixar aplicativo EWM no celular (APK Android, QR Code ou iPhone)"
       >
-        <Smartphone className="w-3.5 h-3.5 text-[#28665E] dark:text-[#68B4A8]" />
-        <span>Salvar no celular</span>
+        <Download className="w-3.5 h-3.5" />
+        <span>Download App</span>
       </button>
 
       {showGuideModal && (

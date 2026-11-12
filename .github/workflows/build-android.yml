@@ -1,0 +1,134 @@
+name: Build & Publish Android APK
+
+on:
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: 'android-apk-release'
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Setup Java 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: Accept Android SDK Licenses
+        run: |
+          if [ -n "$ANDROID_HOME" ] && [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          fi
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Build production web bundle & sync Capacitor Android
+        run: |
+          npm run build
+          npx cap sync android
+
+      - name: Prepare Release Keystore (Persistent Secret with Self-Healing Fallback)
+        id: keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          KEYSTORE_FILE="$RUNNER_TEMP/ewm-release.p12"
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | tr -d ' \n\r' | base64 --decode > "$KEYSTORE_FILE"
+            if keytool -list -keystore "$KEYSTORE_FILE" -storepass "$ANDROID_KEYSTORE_PASSWORD" >/dev/null 2>&1; then
+              echo "Using persistent repository release keystore."
+              echo "EWM_KEYSTORE_PATH=$KEYSTORE_FILE" >> "$GITHUB_ENV"
+              echo "EWM_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+              echo "EWM_KEY_ALIAS=${ANDROID_KEY_ALIAS:-ewm-release}" >> "$GITHUB_ENV"
+              echo "EWM_KEY_PASSWORD=${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          fi
+
+          echo "Generating fallback PKCS12 distribution keystore via keytool..."
+          rm -f "$KEYSTORE_FILE"
+          FALLBACK_PASS="EwmKeepPracticingRelease2026!"
+          keytool -genkeypair -v \
+            -keystore "$KEYSTORE_FILE" \
+            -storetype PKCS12 \
+            -alias ewm-release \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass "$FALLBACK_PASS" \
+            -keypass "$FALLBACK_PASS" \
+            -dname "CN=EWM Keep Practicing, OU=Mobile, O=English With Mariana, L=Sao Paulo, ST=SP, C=BR"
+          echo "EWM_KEYSTORE_PATH=$KEYSTORE_FILE" >> "$GITHUB_ENV"
+          echo "EWM_KEYSTORE_PASSWORD=$FALLBACK_PASS" >> "$GITHUB_ENV"
+          echo "EWM_KEY_ALIAS=ewm-release" >> "$GITHUB_ENV"
+          echo "EWM_KEY_PASSWORD=$FALLBACK_PASS" >> "$GITHUB_ENV"
+
+      - name: Compile Signed Android Release APK
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Stage EWM-Keep-Practicing.apk
+        run: |
+          APK_SOURCE=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -z "$APK_SOURCE" ]; then
+            echo "Error: Release APK not found!"
+            exit 1
+          fi
+          cp "$APK_SOURCE" ./EWM-Keep-Practicing.apk
+          ls -lh ./EWM-Keep-Practicing.apk
+
+      - name: Upload APK Artifact to Workflow Run
+        uses: actions/upload-artifact@v4
+        with:
+          name: EWM-Keep-Practicing-apk
+          path: ./EWM-Keep-Practicing.apk
+          retention-days: 30
+
+      - name: Publish / Update Official Latest GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v1.1.0"
+          TITLE="EWM · Keep practicing — Instalador Oficial Android ($TAG)"
+          NOTES=$(cat <<'EOF'
+          ### 📱 EWM · Keep practicing — Aplicativo Oficial Android (.APK)
+
+          Instalador nativo híbrido compilado automaticamente a partir da branch `main`:
+          - **Áudio Nativo US & UK:** Motor TTS Android dedicado (`en-US` e `en-GB`) com normalização fonética RP.
+          - **100% Offline-First:** Progresso, criação de flashcards, baralhos e pontuação do Quiz salvos localmente com sincronização automática em nuvem.
+          - **Gamificação Tátil & Lembretes:** Vibração háptica nos acertos/giros e notificações locais diárias de estudo.
+
+          **Download Direto:** Clique em **`EWM-Keep-Practicing.apk`** abaixo e confirme a instalação no seu smartphone Android.
+          EOF
+          )
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" ./EWM-Keep-Practicing.apk --clobber
+            gh release edit "$TAG" --latest --draft=false --prerelease=false --title "$TITLE" --notes "$NOTES"
+          else
+            gh release create "$TAG" ./EWM-Keep-Practicing.apk --latest --title "$TITLE" --notes "$NOTES"
+          fi
