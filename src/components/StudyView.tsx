@@ -48,6 +48,7 @@ interface StudyViewProps {
   connectedCardsCount: number;
   totalDeckCount: number;
   focusMode: boolean;
+  showDailyGoalBar?: boolean;
   stats: UserStudyStats;
   onUpdateGoal: (newGoal: number) => void;
   onOpenMonthlyStats: () => void;
@@ -75,6 +76,7 @@ export const StudyView = memo(function StudyView({
   connectedCardsCount,
   totalDeckCount,
   focusMode,
+  showDailyGoalBar = false,
   stats,
   onUpdateGoal,
   onOpenMonthlyStats,
@@ -264,8 +266,8 @@ export const StudyView = memo(function StudyView({
         </div>
       </div>
 
-      {/* Daily Goal & Study Progress Component */}
-      {!focusMode && (
+      {/* Optional Daily Goal & Study Progress Component (when not already shown in top workspace banner) */}
+      {!focusMode && showDailyGoalBar && (
         <DailyGoalProgressBar
           stats={stats}
           onUpdateGoal={onUpdateGoal}
@@ -343,7 +345,7 @@ export const StudyView = memo(function StudyView({
               onTouchStart={handleTouchStart}
               onTouchEnd={handleTouchEnd}
               aria-label={`Flashcard ${currentCard.term}`}
-              className={`flashcard-inner cursor-pointer select-none ${
+              className={`flashcard-inner no-tactile-scale cursor-pointer select-none ${
                 isFlipped ? 'is-flipped' : ''
               }`}
             >

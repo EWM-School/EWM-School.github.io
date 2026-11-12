@@ -17,7 +17,11 @@ export type CardStatus = 'unseen' | 'review' | 'mastered';
 
 export type CardOrigin = 'seed' | 'global' | 'custom';
 
-export type AppTab = 'study' | 'decks' | 'quiz' | 'list';
+export type MainPillar = 'study' | 'speaking' | 'games';
+
+export type StudySubMode = 'study' | 'decks' | 'list';
+
+export type AppTab = 'study' | 'decks' | 'quiz' | 'list' | 'speaking' | 'games';
 
 export type StudyScope = 'selected' | 'decks' | 'all';
 

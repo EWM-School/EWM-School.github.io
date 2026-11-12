@@ -2,12 +2,15 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import { AuthAccountModal } from './components/AuthAccountModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { CoverView } from './components/CoverView';
+import { DesktopSidebar } from './components/DesktopSidebar';
 import { FilterToolbar } from './components/FilterToolbar';
 import { Header } from './components/Header';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { StudyReminderModal } from './components/StudyReminderModal';
+import { StudySubNav } from './components/StudySubNav';
 import { StudyView } from './components/StudyView';
 import { UpdateAvailableBanner } from './components/UpdateAvailableBanner';
+import { WorkspaceProgressBanner } from './components/WorkspaceProgressBanner';
 import {
   DEFAULT_STARTER_STUDY_IDS,
   INITIAL_CARDS,
@@ -81,10 +84,12 @@ import type {
   Flashcard,
   ListSelectionFilter,
   ListViewMode,
+  MainPillar,
   QuizOption,
   QuizQuestion,
   StatusFilter,
   StudyScope,
+  StudySubMode,
   SubtopicKey,
   SyncStatus,
   ThemeMode,
@@ -127,11 +132,14 @@ import type { ShareCardPayload } from './utils/shareCardGenerator';
 const LazyDecksView = lazy(() =>
   import('./components/DecksView').then((m) => ({ default: m.DecksView }))
 );
-const LazyQuizView = lazy(() =>
-  import('./components/QuizView').then((m) => ({ default: m.QuizView }))
-);
 const LazyListView = lazy(() =>
   import('./components/ListView').then((m) => ({ default: m.ListView }))
+);
+const LazySpeakingLabView = lazy(() =>
+  import('./components/SpeakingLabView').then((m) => ({ default: m.SpeakingLabView }))
+);
+const LazyGamesHubView = lazy(() =>
+  import('./components/GamesHubView').then((m) => ({ default: m.GamesHubView }))
 );
 const LazyCardModal = lazy(() =>
   import('./components/CardModal').then((m) => ({ default: m.CardModal }))
@@ -456,7 +464,9 @@ export default function App() {
             tabParam === 'study' ||
             tabParam === 'decks' ||
             tabParam === 'quiz' ||
-            tabParam === 'list'
+            tabParam === 'list' ||
+            tabParam === 'speaking' ||
+            tabParam === 'games'
           ) {
             setActiveTab(tabParam);
             setShowCover(false);
@@ -487,7 +497,13 @@ export default function App() {
   useEffect(() => {
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) return;
-      if (!showCover && (activeTab === 'study' || activeTab === 'quiz')) {
+      if (
+        !showCover &&
+        (activeTab === 'study' ||
+          activeTab === 'quiz' ||
+          activeTab === 'speaking' ||
+          activeTab === 'games')
+      ) {
         setUserStats((prev) => {
           const next = recordStudyTimeInStats(15, prev);
           void saveStudyStatsLocal(next);
@@ -1030,6 +1046,14 @@ export default function App() {
         return;
       }
 
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        if (!showCover) {
+          e.preventDefault();
+          setPhoneticModalOpen(true);
+        }
+        return;
+      }
+
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
       const lowerKey = e.key.toLowerCase();
@@ -1489,15 +1513,51 @@ export default function App() {
     );
   }, [quizPool, quizQuestion?.card.id, selectedCategory, selectedSubtopic]);
 
+  const lastStudySubModeRef = useRef<StudySubMode>('study');
+  if (activeTab === 'study' || activeTab === 'decks' || activeTab === 'list') {
+    lastStudySubModeRef.current = activeTab;
+  }
+
+  const activePillar: MainPillar =
+    activeTab === 'speaking'
+      ? 'speaking'
+      : activeTab === 'games' || activeTab === 'quiz'
+      ? 'games'
+      : 'study';
+
+  const activeStudySubMode: StudySubMode =
+    activeTab === 'decks' || activeTab === 'list' || activeTab === 'study'
+      ? activeTab
+      : lastStudySubModeRef.current;
+
   const handleTabChange = useCallback(
     (tab: AppTab) => {
+      if (tab === 'study' || tab === 'decks' || tab === 'list') {
+        lastStudySubModeRef.current = tab;
+      }
       setActiveTab(tab);
-      if (tab === 'quiz') {
+      if (tab === 'quiz' || (tab === 'games' && !quizQuestion)) {
         setQuizSelectedOptionId(null);
         setQuizQuestion(generateQuizQuestion(quizPool, selectedCategory, selectedSubtopic));
       }
     },
-    [quizPool, selectedCategory, selectedSubtopic]
+    [quizPool, quizQuestion, selectedCategory, selectedSubtopic]
+  );
+
+  const handleSelectPillar = useCallback(
+    (pillar: MainPillar) => {
+      if (focusMode && pillar !== 'study') {
+        setFocusMode(false);
+      }
+      if (pillar === 'study') {
+        handleTabChange(lastStudySubModeRef.current);
+      } else if (pillar === 'speaking') {
+        handleTabChange('speaking');
+      } else {
+        handleTabChange('games');
+      }
+    },
+    [focusMode, handleTabChange]
   );
 
   const handleUpdateCustomOrLocalField = useCallback(
@@ -1553,13 +1613,6 @@ export default function App() {
     },
     [handleTabChange]
   );
-
-  const activeScopeSummary =
-    studyScope === 'decks'
-      ? `${connectedCards.length} conectados`
-      : studyScope === 'selected'
-      ? `${selectedStudyIds.size} em estudo`
-      : `${cards.length} no acervo`;
 
   const cardModalDeckName =
     cardModalCtx.mode === 'custom_for_deck'
@@ -1657,199 +1710,270 @@ export default function App() {
           onOpenPhoneticGuide={() => setPhoneticModalOpen(true)}
         />
       ) : (
-        <>
-          <Header
-            activeTab={activeTab}
-            onChangeTab={handleTabChange}
+        <div className="ewm-app-shell flex-1 flex min-h-screen w-full">
+          {/* Desktop Fixed Left Sidebar (>= 768px) */}
+          <DesktopSidebar
+            activePillar={activePillar}
+            onSelectPillar={handleSelectPillar}
             onOpenCover={handleOpenCover}
-            theme={theme}
-            onToggleTheme={handleToggleTheme}
-            focusMode={focusMode}
-            onToggleFocusMode={() => setFocusMode((v) => !v)}
-            onOpenPhoneticGuide={() => setPhoneticModalOpen(true)}
-            onOpenReminderModal={() => setReminderModalOpen(true)}
             onOpenDownloadModal={() => setDownloadModalOpen(true)}
-            reminderEnabled={reminderEnabled}
             onOpenNewCard={handleOpenNewCustomCard}
+            focusMode={focusMode}
             totalCards={cards.length}
             decksCount={userDecks.length}
-            activeScopeSummary={activeScopeSummary}
             syncStatus={syncStatus}
             syncLabel={syncLabel}
             pendingSyncCount={pendingSyncCount}
-            userDisplayName={currentUser?.displayName || null}
-            userEmail={currentUser?.email || null}
-            isAdmin={isAdmin}
-            onOpenAuthModal={() => setAuthModalOpen(true)}
-            onOpenAdminPanel={() => setAdminModalOpen(true)}
           />
 
-          <main className="flex-1 max-w-6xl w-full mx-auto px-3.5 sm:px-6 py-3 sm:py-7 space-y-3 sm:space-y-5 ios-safe-main">
-            {!focusMode && (activeTab === 'study' || activeTab === 'list') && (
-              <FilterToolbar
-                selectedCategory={selectedCategory}
-                onChangeCategory={(cat) => {
-                  setSelectedCategory(cat);
-                  setCurrentIndex(0);
-                  setIsFlipped(false);
-                }}
-                selectedSubtopic={selectedSubtopic}
-                onChangeSubtopic={(sub) => {
-                  setSelectedSubtopic(sub);
-                  setCurrentIndex(0);
-                  setIsFlipped(false);
-                }}
-                selectedStatus={selectedStatus}
-                onChangeStatus={(st) => {
-                  setSelectedStatus(st);
-                  setCurrentIndex(0);
-                  setIsFlipped(false);
-                }}
-                folderCounts={folderCounts}
-                subtopicCounts={subtopicCounts}
-                onShuffle={handleShuffle}
-                showShuffle={activeTab === 'study'}
-              />
-            )}
-
-            {activeTab === 'study' && (
-              <StudyView
-                cards={filteredStudyCards}
-                currentIndex={currentIndex}
-                isFlipped={isFlipped}
-                studyScope={studyScope}
-                selectedCount={selectedStudyIds.size}
-                connectedCardsCount={connectedCards.length}
-                totalDeckCount={cards.length}
-                focusMode={focusMode}
-                stats={userStats}
-                onUpdateGoal={handleUpdateGoal}
-                onOpenMonthlyStats={() => setRankingModalOpen(true)}
-                onToggleFlip={handleToggleFlip}
-                onPrev={handlePrevCard}
-                onNext={handleNextCard}
-                onMarkStatus={handleMarkStatus}
-                onChangeScope={handleChangeScope}
-                onQuickRandomSelection={handleQuickRandomSelection}
-                onGoToList={() => setActiveTab('list')}
-                onGoToDecks={() => setActiveTab('decks')}
-                onEditCard={handleEditCard}
-                onDeleteCard={setPendingDeleteCard}
-                onShareCard={(card) => setSharePayload({ kind: 'flashcard', card })}
-                onToggleFocusMode={() => setFocusMode((v) => !v)}
-                onResetFilters={() => {
-                  setSelectedCategory('all');
-                  setSelectedSubtopic('all');
-                  setSelectedStatus('all');
-                  handleChangeScope('all');
-                }}
-              />
-            )}
-
-            {activeTab === 'decks' && (
-              <Suspense fallback={<ViewSuspenseFallback />}>
-                <LazyDecksView
-                  allCards={cards}
-                  userDecks={userDecks}
-                  connectedDeckIds={connectedDeckIds}
-                  connectedCardsCount={connectedCards.length}
-                  onToggleConnectDeck={handleToggleConnectDeck}
-                  onStudySingleDeck={handleStudySingleDeck}
-                  onStartConnectedStudy={() => {
-                    handleChangeScope('decks');
-                    setActiveTab('study');
-                  }}
-                  onStartConnectedQuiz={() => {
-                    handleChangeScope('decks');
-                    setQuizSelectedOptionId(null);
-                    setQuizQuestion(
-                      generateQuizQuestion(connectedCards, selectedCategory, selectedSubtopic)
-                    );
-                    setActiveTab('quiz');
-                  }}
-                  onCreateOrUpdateDeckMeta={handleCreateOrUpdateDeckMeta}
-                  onDeleteDeck={setPendingDeleteDeck}
-                  onToggleCardInDeck={handleToggleCardInDeck}
-                  onOpenCreateCustomCard={(targetDeckId) => {
-                    setEditingCard(null);
-                    setCardModalCtx(
-                      targetDeckId
-                        ? { mode: 'custom_for_deck', deckId: targetDeckId }
-                        : { mode: 'custom' }
-                    );
-                    setCardModalOpen(true);
-                  }}
-                />
-              </Suspense>
-            )}
-
-            {activeTab === 'quiz' && (
-              <Suspense fallback={<ViewSuspenseFallback />}>
-                <LazyQuizView
-                  question={quizQuestion}
-                  selectedOptionId={quizSelectedOptionId}
-                  score={quizScore}
-                  totalAnswered={quizTotal}
-                  onSelectOption={handleSelectQuizOption}
-                  onNextQuestion={handleNextQuizQuestion}
-                  onResetScore={handleResetQuizScore}
-                  onShareQuizAchievement={(featuredCard) =>
-                    setSharePayload({
-                      kind: 'quiz',
-                      score: quizScore,
-                      totalAnswered: quizTotal,
-                      featuredCard,
-                    })
+          {/* Central Workspace Column */}
+          <div className="flex-1 min-w-0 flex flex-col">
+            <Header
+              activePillar={activePillar}
+              onOpenCover={handleOpenCover}
+              theme={theme}
+              onToggleTheme={handleToggleTheme}
+              focusMode={focusMode}
+              onToggleFocusMode={() => {
+                setFocusMode((prev) => {
+                  const next = !prev;
+                  if (next && activeTab !== 'study') {
+                    handleTabChange('study');
                   }
-                />
-              </Suspense>
-            )}
+                  return next;
+                });
+              }}
+              onOpenUnifiedLookup={() => setPhoneticModalOpen(true)}
+              onOpenReminderModal={() => setReminderModalOpen(true)}
+              onOpenDownloadModal={() => setDownloadModalOpen(true)}
+              reminderEnabled={reminderEnabled}
+              onOpenNewCard={handleOpenNewCustomCard}
+              syncStatus={syncStatus}
+              syncLabel={syncLabel}
+              pendingSyncCount={pendingSyncCount}
+              userDisplayName={currentUser?.displayName || null}
+              userEmail={currentUser?.email || null}
+              isAdmin={isAdmin}
+              onOpenAuthModal={() => setAuthModalOpen(true)}
+              onOpenAdminPanel={() => setAdminModalOpen(true)}
+            />
 
-            {activeTab === 'list' && (
-              <Suspense fallback={<ViewSuspenseFallback />}>
-                <LazyListView
-                  cards={filteredListCards}
-                  allCardsCount={cards.length}
-                  selectedStudyIds={selectedStudyIds}
-                  searchQuery={searchQuery}
-                  onChangeSearch={setSearchQuery}
-                  listSelectionFilter={listSelectionFilter}
-                  onChangeSelectionFilter={setListSelectionFilter}
-                  listViewMode={listViewMode}
-                  onChangeViewMode={setListViewMode}
-                  onToggleCardSelection={handleToggleCardSelection}
-                  onSelectRandom={handleQuickRandomSelection}
-                  onClearSelection={handleClearSelection}
-                  onUpdateCardCategory={(cardId, category) => {
-                    handleUpdateCustomOrLocalField(cardId, { category });
-                    showToast(`Card movido para "${category}".`);
-                  }}
-                  onUpdateCardSubtopic={(cardId, subtopic) => {
-                    handleUpdateCustomOrLocalField(cardId, { subtopic });
-                    showToast(`Subtópico atualizado para "${subtopic}".`);
-                  }}
-                  onEditCard={handleEditCard}
-                  onDeleteCard={setPendingDeleteCard}
-                  onGoToStudy={() => {
-                    handleChangeScope('selected');
-                    setActiveTab('study');
-                  }}
-                  onNotify={showToast}
+            <main className="flex-1 max-w-5xl w-full mx-auto px-3.5 sm:px-6 py-3 sm:py-6 space-y-3 sm:space-y-4 ios-safe-main">
+              {/* Top Aligned Summary: Progresso / XP / Posição no Ranking */}
+              {!focusMode && (
+                <WorkspaceProgressBanner
+                  stats={userStats}
+                  userDisplayName={currentUser?.displayName || null}
+                  userEmail={currentUser?.email || null}
+                  currentUid={currentUser?.uid || null}
+                  masteredCount={masteredCardsCount}
+                  reviewCount={reviewCardsCount}
+                  totalCards={cards.length}
+                  quizScore={quizScore}
+                  cloudLeaderboard={cloudLeaderboard}
+                  onUpdateGoal={handleUpdateGoal}
+                  onOpenRankingModal={() => setRankingModalOpen(true)}
                 />
-              </Suspense>
-            )}
-          </main>
+              )}
 
-          {/* Ergonomic Smartphone Bottom Navigation (>= 48px tap targets + Safe Area) */}
+              {/* PILLAR 1: ESTUDO (Flashcards + Baralhos + Acervo Grade/Lista + Modo Foco) */}
+              {activePillar === 'study' && (
+                <div key="pillar-study" className="ewm-pillar-enter space-y-3 sm:space-y-4">
+                  <StudySubNav
+                    activeSubMode={activeStudySubMode}
+                    decksCount={userDecks.length}
+                    totalCards={cards.length}
+                    focusMode={focusMode}
+                    onChangeSubMode={(mode) => handleTabChange(mode)}
+                  />
+
+                  {!focusMode &&
+                    (activeStudySubMode === 'study' || activeStudySubMode === 'list') && (
+                      <FilterToolbar
+                        selectedCategory={selectedCategory}
+                        onChangeCategory={(cat) => {
+                          setSelectedCategory(cat);
+                          setCurrentIndex(0);
+                          setIsFlipped(false);
+                        }}
+                        selectedSubtopic={selectedSubtopic}
+                        onChangeSubtopic={(sub) => {
+                          setSelectedSubtopic(sub);
+                          setCurrentIndex(0);
+                          setIsFlipped(false);
+                        }}
+                        selectedStatus={selectedStatus}
+                        onChangeStatus={(st) => {
+                          setSelectedStatus(st);
+                          setCurrentIndex(0);
+                          setIsFlipped(false);
+                        }}
+                        folderCounts={folderCounts}
+                        subtopicCounts={subtopicCounts}
+                        onShuffle={handleShuffle}
+                        showShuffle={activeStudySubMode === 'study'}
+                      />
+                    )}
+
+                  {activeStudySubMode === 'study' && (
+                    <StudyView
+                      cards={filteredStudyCards}
+                      currentIndex={currentIndex}
+                      isFlipped={isFlipped}
+                      studyScope={studyScope}
+                      selectedCount={selectedStudyIds.size}
+                      connectedCardsCount={connectedCards.length}
+                      totalDeckCount={cards.length}
+                      focusMode={focusMode}
+                      stats={userStats}
+                      onUpdateGoal={handleUpdateGoal}
+                      onOpenMonthlyStats={() => setRankingModalOpen(true)}
+                      onToggleFlip={handleToggleFlip}
+                      onPrev={handlePrevCard}
+                      onNext={handleNextCard}
+                      onMarkStatus={handleMarkStatus}
+                      onChangeScope={handleChangeScope}
+                      onQuickRandomSelection={handleQuickRandomSelection}
+                      onGoToList={() => handleTabChange('list')}
+                      onGoToDecks={() => handleTabChange('decks')}
+                      onEditCard={handleEditCard}
+                      onDeleteCard={setPendingDeleteCard}
+                      onShareCard={(card) => setSharePayload({ kind: 'flashcard', card })}
+                      onToggleFocusMode={() => setFocusMode((v) => !v)}
+                      onResetFilters={() => {
+                        setSelectedCategory('all');
+                        setSelectedSubtopic('all');
+                        setSelectedStatus('all');
+                        handleChangeScope('all');
+                      }}
+                    />
+                  )}
+
+                  {activeStudySubMode === 'decks' && (
+                    <Suspense fallback={<ViewSuspenseFallback />}>
+                      <LazyDecksView
+                        allCards={cards}
+                        userDecks={userDecks}
+                        connectedDeckIds={connectedDeckIds}
+                        connectedCardsCount={connectedCards.length}
+                        onToggleConnectDeck={handleToggleConnectDeck}
+                        onStudySingleDeck={handleStudySingleDeck}
+                        onStartConnectedStudy={() => {
+                          handleChangeScope('decks');
+                          handleTabChange('study');
+                        }}
+                        onStartConnectedQuiz={() => {
+                          handleChangeScope('decks');
+                          setQuizSelectedOptionId(null);
+                          setQuizQuestion(
+                            generateQuizQuestion(connectedCards, selectedCategory, selectedSubtopic)
+                          );
+                          handleTabChange('quiz');
+                        }}
+                        onCreateOrUpdateDeckMeta={handleCreateOrUpdateDeckMeta}
+                        onDeleteDeck={setPendingDeleteDeck}
+                        onToggleCardInDeck={handleToggleCardInDeck}
+                        onOpenCreateCustomCard={(targetDeckId) => {
+                          setEditingCard(null);
+                          setCardModalCtx(
+                            targetDeckId
+                              ? { mode: 'custom_for_deck', deckId: targetDeckId }
+                              : { mode: 'custom' }
+                          );
+                          setCardModalOpen(true);
+                        }}
+                      />
+                    </Suspense>
+                  )}
+
+                  {activeStudySubMode === 'list' && (
+                    <Suspense fallback={<ViewSuspenseFallback />}>
+                      <LazyListView
+                        cards={filteredListCards}
+                        allCardsCount={cards.length}
+                        selectedStudyIds={selectedStudyIds}
+                        searchQuery={searchQuery}
+                        onChangeSearch={setSearchQuery}
+                        listSelectionFilter={listSelectionFilter}
+                        onChangeSelectionFilter={setListSelectionFilter}
+                        listViewMode={listViewMode}
+                        onChangeViewMode={setListViewMode}
+                        onToggleCardSelection={handleToggleCardSelection}
+                        onSelectRandom={handleQuickRandomSelection}
+                        onClearSelection={handleClearSelection}
+                        onUpdateCardCategory={(cardId, category) => {
+                          handleUpdateCustomOrLocalField(cardId, { category });
+                          showToast(`Card movido para "${category}".`);
+                        }}
+                        onUpdateCardSubtopic={(cardId, subtopic) => {
+                          handleUpdateCustomOrLocalField(cardId, { subtopic });
+                          showToast(`Subtópico atualizado para "${subtopic}".`);
+                        }}
+                        onEditCard={handleEditCard}
+                        onDeleteCard={setPendingDeleteCard}
+                        onGoToStudy={() => {
+                          handleChangeScope('selected');
+                          handleTabChange('study');
+                        }}
+                        onNotify={showToast}
+                      />
+                    </Suspense>
+                  )}
+                </div>
+              )}
+
+              {/* PILLAR 2: SPEAKING LAB (React.lazy) */}
+              {activePillar === 'speaking' && (
+                <Suspense fallback={<ViewSuspenseFallback />}>
+                  <LazySpeakingLabView
+                    cards={filteredStudyCards.length > 0 ? filteredStudyCards : cards}
+                    onGoToStudy={() => handleSelectPillar('study')}
+                  />
+                </Suspense>
+              )}
+
+              {/* PILLAR 3: JOGOS (React.lazy — Modo Quiz + Ranking + 4 Mini-Games) */}
+              {activePillar === 'games' && (
+                <Suspense fallback={<ViewSuspenseFallback />}>
+                  <LazyGamesHubView
+                    key={activeTab === 'quiz' ? 'games-quiz-open' : 'games-hub'}
+                    defaultOpenQuiz={activeTab === 'quiz'}
+                    question={quizQuestion}
+                    selectedOptionId={quizSelectedOptionId}
+                    score={quizScore}
+                    totalAnswered={quizTotal}
+                    stats={userStats}
+                    userDisplayName={currentUser?.displayName || null}
+                    userEmail={currentUser?.email || null}
+                    currentUid={currentUser?.uid || null}
+                    masteredCount={masteredCardsCount}
+                    reviewCount={reviewCardsCount}
+                    cloudLeaderboard={cloudLeaderboard}
+                    onSelectOption={handleSelectQuizOption}
+                    onNextQuestion={handleNextQuizQuestion}
+                    onResetScore={handleResetQuizScore}
+                    onOpenRankingModal={() => setRankingModalOpen(true)}
+                    onShareQuizAchievement={(featuredCard) =>
+                      setSharePayload({
+                        kind: 'quiz',
+                        score: quizScore,
+                        totalAnswered: quizTotal,
+                        featuredCard,
+                      })
+                    }
+                  />
+                </Suspense>
+              )}
+            </main>
+          </div>
+
+          {/* Ergonomic Smartphone Bottom Navigation (< 768px, 3 Pillars + Safe Area) */}
           <MobileBottomNav
-            activeTab={activeTab}
-            decksCount={userDecks.length}
-            totalCards={cards.length}
+            activePillar={activePillar}
             focusMode={focusMode}
-            onChangeTab={handleTabChange}
-            onOpenNewCard={handleOpenNewCustomCard}
+            onSelectPillar={handleSelectPillar}
           />
-        </>
+        </div>
       )}
 
       {/* Lazy-Loaded Modals */}

@@ -1,0 +1,147 @@
+/* ==========================================================================
+   EWM · Keep practicing — Unified Motion System (motionSystem.css)
+   Applies cohesive tactile physics across the post-login workspace (150ms–250ms)
+   Curve: cubic-bezier(0.22, 1, 0.36, 1)
+   ========================================================================== */
+
+:root {
+  --ewm-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ewm-duration-fast: 150ms;
+  --ewm-duration-tab: 180ms;
+  --ewm-duration-slide: 220ms;
+  --ewm-duration-max: 250ms;
+  --ewm-neon: #38e5a5;
+  --ewm-neon-strong: #22c58b;
+  --ewm-neon-glow: rgba(56, 229, 165, 0.28);
+}
+
+/* 1. Post-Login Tactile Feedback (Buttons & Interactive Surfaces) */
+.ewm-app-shell button:not(:disabled):not(.no-tactile-scale),
+.ewm-app-shell [role="button"]:not([aria-disabled="true"]):not(.no-tactile-scale),
+.ewm-tactile {
+  transition-property: transform, background-color, border-color, color, box-shadow, opacity;
+  transition-duration: var(--ewm-duration-fast);
+  transition-timing-function: var(--ewm-ease-out);
+}
+
+.ewm-app-shell button:not(:disabled):not(.no-tactile-scale):active,
+.ewm-app-shell [role="button"]:not([aria-disabled="true"]):not(.no-tactile-scale):active,
+.ewm-tactile:active {
+  transform: scale(0.97);
+}
+
+/* 2. Pillar & View Switch Transition (fade + translateY(4px) in 180ms) */
+@keyframes ewmPillarEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.ewm-pillar-enter {
+  animation: ewmPillarEnter var(--ewm-duration-tab) var(--ewm-ease-out) both;
+  will-change: opacity, transform;
+}
+
+/* 3. Smoothly Sliding Active Indicator (Bottom Nav, Sidebar & Sub-Switchers) */
+.ewm-nav-slider {
+  transition:
+    transform var(--ewm-duration-slide) var(--ewm-ease-out),
+    width var(--ewm-duration-slide) var(--ewm-ease-out),
+    height var(--ewm-duration-slide) var(--ewm-ease-out),
+    opacity var(--ewm-duration-tab) var(--ewm-ease-out);
+  will-change: transform;
+}
+
+/* 4. Reusable Pedagogical Feedback Utilities (Prepared for Layers 2, 3 & 4) */
+
+/* Subtle horizontal 3px shake over 200ms — gentle error cue without harsh red flash */
+@keyframes ewmMicroShake {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  25% {
+    transform: translate3d(-3px, 0, 0);
+  }
+  50% {
+    transform: translate3d(3px, 0, 0);
+  }
+  75% {
+    transform: translate3d(-2px, 0, 0);
+  }
+}
+
+.ewm-micro-shake {
+  animation: ewmMicroShake 200ms var(--ewm-ease-out) both;
+}
+
+/* Gentle green breathing halo for Speaking Lab microphone capture */
+@keyframes ewmBreathingRing {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(56, 229, 165, 0.36),
+      0 0 0 5px rgba(56, 229, 165, 0.12);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow:
+      0 0 0 7px rgba(56, 229, 165, 0.18),
+      0 0 0 14px rgba(56, 229, 165, 0.04);
+    transform: scale(1.025);
+  }
+}
+
+.ewm-breathing-ring {
+  animation: ewmBreathingRing 2200ms var(--ewm-ease-out) infinite;
+}
+
+/* Floating +XP reward badge rising 15px with smooth fade-out */
+@keyframes ewmFloatXp {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 3px, 0) scale(0.95);
+  }
+  22% {
+    opacity: 1;
+    transform: translate3d(0, -3px, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, -15px, 0) scale(1.02);
+  }
+}
+
+.ewm-float-xp {
+  animation: ewmFloatXp 680ms var(--ewm-ease-out) forwards;
+  pointer-events: none;
+}
+
+/* 5. Accessibility: Strict Reduced Motion Compliance */
+@media (prefers-reduced-motion: reduce) {
+  .ewm-app-shell button:not(:disabled):not(.no-tactile-scale),
+  .ewm-app-shell [role="button"]:not([aria-disabled="true"]):not(.no-tactile-scale),
+  .ewm-tactile,
+  .ewm-nav-slider {
+    transition-duration: 0.01ms !important;
+  }
+
+  .ewm-app-shell button:not(:disabled):not(.no-tactile-scale):active,
+  .ewm-app-shell [role="button"]:not([aria-disabled="true"]):not(.no-tactile-scale):active,
+  .ewm-tactile:active {
+    transform: none !important;
+  }
+
+  .ewm-pillar-enter,
+  .ewm-micro-shake,
+  .ewm-breathing-ring,
+  .ewm-float-xp,
+  .animate-card-enter {
+    animation: none !important;
+  }
+}
