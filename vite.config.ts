@@ -57,6 +57,7 @@ export default defineConfig(() => {
     server: {
       // HMR is disabled in AI Studio preview environment
       hmr: false,
+      allowedHosts: true,
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
   };

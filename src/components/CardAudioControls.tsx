@@ -179,8 +179,8 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
         </button>
       </div>
 
-      {/* Primary Clickable Hybrid Speech Buttons (US en-US & UK en-GB) — Ergonomic Mobile Scale */}
-      <div className="grid grid-cols-2 sm:inline-flex items-center justify-center gap-2 sm:gap-2.5 w-full sm:w-auto max-w-md mx-auto">
+      {/* Aligned Compact Pill Controls: USA 🇺🇸 + UK 🇬🇧 + Circular 🎤 Button (Reference Layout) */}
+      <div className="flex items-center justify-center gap-2 sm:gap-2.5 flex-wrap">
         <button
           type="button"
           data-testid="card-audio-us"
@@ -201,7 +201,7 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
               sourceId: 'card-main-us',
             });
           }}
-          className={`min-h-[42px] sm:min-h-[48px] inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-[13px] font-semibold transition-all duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#28665E] active:scale-[0.98] ${
+          className={`min-h-[42px] sm:min-h-[44px] inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-full text-xs sm:text-[13px] font-bold transition-all duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00C982] active:scale-[0.98] ${
             mainUsState === 'loading'
               ? 'ewm-audio-loading'
               : mainUsState === 'playing'
@@ -209,25 +209,20 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
               : ''
           } ${
             isActiveMainUs
-              ? 'bg-[#28665E] hover:bg-[#1F524B] dark:bg-[#2A6D63] dark:hover:bg-[#327D72] text-white dark:text-[#F4F7F6] border border-[#28665E] dark:border-[#3E8E82] shadow-xs'
-              : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1D302D] dark:hover:bg-[#253D39] text-[#1E4E47] dark:text-[#86CEC2] border border-[#C2DAD5] dark:border-[#2F4B46]'
+              ? 'bg-[#00C982] dark:bg-[#38E5A5] text-[#05291D] border border-[#00C982] dark:border-[#38E5A5] shadow-[0_0_16px_rgba(56,229,165,0.38)]'
+              : 'bg-[#EFF8F5] hover:bg-[#E1F4EC] dark:bg-[#1E2833] dark:hover:bg-[#253240] text-[#0F3D30] dark:text-[#E2E8F0] border border-[#10D990]/35 dark:border-[#38E5A5]/28'
           }`}
         >
-          <AudioStatusIcon state={mainUsState} idleClassName="w-4 h-4 shrink-0" activeClassName="w-4 h-3.5" />
-          <span className="truncate">
-            {mainUsState === 'loading' ? (
-              'Carregando US...'
-            ) : mainUsState === 'playing' ? (
-              'Ouvindo US...'
-            ) : (
-              <>
-                <span className="sm:hidden">Ouvir US</span>
-                <span className="hidden sm:inline">Ouvir US · Americano</span>
-              </>
-            )}
+          <AudioStatusIcon state={mainUsState} idleClassName="w-3.5 h-3.5 shrink-0 text-[#00C982] dark:text-[#38E5A5]" activeClassName="w-3.5 h-3.5" />
+          <span>
+            {mainUsState === 'loading'
+              ? 'US...'
+              : mainUsState === 'playing'
+              ? 'USA 🇺🇸'
+              : 'USA 🇺🇸'}
           </span>
           {!isActiveMainUs && (
-            <span className="hidden md:inline font-mono-num text-[10px] opacity-65">
+            <span className="hidden md:inline font-mono-num text-[10px] opacity-60">
               [U]
             </span>
           )}
@@ -253,7 +248,7 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
               sourceId: 'card-main-uk',
             });
           }}
-          className={`min-h-[42px] sm:min-h-[48px] inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-[13px] font-semibold transition-all duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#243B53] active:scale-[0.98] ${
+          className={`min-h-[42px] sm:min-h-[44px] inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-full text-xs sm:text-[13px] font-bold transition-all duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#38BDF8] active:scale-[0.98] ${
             mainUkState === 'loading'
               ? 'ewm-audio-loading'
               : mainUkState === 'playing'
@@ -261,29 +256,46 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
               : ''
           } ${
             isActiveMainUk
-              ? 'bg-[#243B53] hover:bg-[#1B2D40] dark:bg-[#2E4C6B] dark:hover:bg-[#375A7F] text-white dark:text-[#F4F7F8] border border-[#243B53] dark:border-[#496F96] shadow-xs'
-              : 'bg-[#EDF1F5] hover:bg-[#DFE6EE] dark:bg-[#1E2630] dark:hover:bg-[#26313E] text-[#243B53] dark:text-[#9CC3E6] border border-[#C9D5E2] dark:border-[#334354]'
+              ? 'bg-[#0284C7] dark:bg-[#0EA5E9] text-white border border-[#38BDF8] shadow-[0_0_16px_rgba(56,189,248,0.38)]'
+              : 'bg-[#F0F7FC] hover:bg-[#E1EFF9] dark:bg-[#1E2833] dark:hover:bg-[#253240] text-[#0F3352] dark:text-[#E2E8F0] border border-[#38BDF8]/35 dark:border-[#38BDF8]/25'
           }`}
         >
-          <AudioStatusIcon state={mainUkState} idleClassName="w-4 h-4 shrink-0" activeClassName="w-4 h-3.5" />
-          <span className="truncate">
-            {mainUkState === 'loading' ? (
-              'Carregando UK...'
-            ) : mainUkState === 'playing' ? (
-              'Ouvindo UK...'
-            ) : (
-              <>
-                <span className="sm:hidden">Ouvir UK</span>
-                <span className="hidden sm:inline">Ouvir UK · Britânico</span>
-              </>
-            )}
+          <AudioStatusIcon state={mainUkState} idleClassName="w-3.5 h-3.5 shrink-0 text-[#0284C7] dark:text-[#38BDF8]" activeClassName="w-3.5 h-3.5" />
+          <span>
+            {mainUkState === 'loading'
+              ? 'UK...'
+              : mainUkState === 'playing'
+              ? 'UK 🇬🇧'
+              : 'UK 🇬🇧'}
           </span>
           {!isActiveMainUk && (
-            <span className="hidden md:inline font-mono-num text-[10px] opacity-65">
+            <span className="hidden md:inline font-mono-num text-[10px] opacity-60">
               [B]
             </span>
           )}
         </button>
+
+        {onOpenPronunciation && (
+          <button
+            type="button"
+            data-testid="card-pronunciation-mic-front"
+            aria-pressed={isPronunciationOpen}
+            aria-label={`Treinar pronúncia de ${term}`}
+            title="Treinar pronúncia com avaliação acústica IA"
+            onClick={(e) => {
+              e.stopPropagation();
+              void triggerTap();
+              onOpenPronunciation();
+            }}
+            className={`w-[42px] h-[42px] sm:w-[44px] sm:h-[44px] inline-flex items-center justify-center rounded-full border transition-all shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00C982] ${
+              isPronunciationOpen
+                ? 'bg-[#00C982] dark:bg-[#38E5A5] text-[#05291D] border-[#00C982] dark:border-[#38E5A5] shadow-[0_0_18px_rgba(56,229,165,0.45)]'
+                : 'bg-[#FEF3C7]/85 hover:bg-[#FDE68A] dark:bg-[#2E2516] dark:hover:bg-[#3B2F1B] text-[#D97706] dark:text-[#FBBF24] border-[#F59E0B]/45 dark:border-[#FBBF24]/35 shadow-[0_0_12px_rgba(251,191,36,0.16)]'
+            }`}
+          >
+            <Mic className="w-4 h-4 shrink-0" />
+          </button>
+        )}
       </div>
 
       {/* Secondary Speech Study Controls: Sequential US -> UK Comparison & Cadence Speed */}
@@ -308,7 +320,7 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
               sourceId: 'card-main-compare',
             });
           }}
-          className={`min-h-[36px] lg:min-h-[34px] inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#28665E] ${
+          className={`min-h-[34px] inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00C982] ${
             compareState === 'loading'
               ? 'ewm-audio-loading'
               : compareState === 'playing'
@@ -316,8 +328,8 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
               : ''
           } ${
             isComparingTerm
-              ? 'bg-[#1C1B18] dark:bg-[#EBE7DE] text-[#F6F4EF] dark:text-[#181A18] font-semibold'
-              : 'bg-[#F3F1EC] hover:bg-[#E7E3DA] dark:bg-[#282C28] dark:hover:bg-[#313631] text-[#4A463F] dark:text-[#C5C0B5] border border-[#E2DDD3] dark:border-[#343A34]'
+              ? 'bg-[#00C982] dark:bg-[#38E5A5] text-[#05291D] font-bold'
+              : 'bg-[#F1F7F5] hover:bg-[#E4F2ED] dark:bg-[#19232E] dark:hover:bg-[#202D3B] text-[#475550] dark:text-[#B5C4BE] border border-[#DCE8E3] dark:border-[#283645]'
           }`}
         >
           <AudioStatusIcon
@@ -351,38 +363,15 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
           }
           title="Alternar velocidade da voz entre Normal (1x) e Lenta didática (0.7x) (Atalho S)"
           onClick={handleToggleSpeed}
-          className={`min-h-[36px] lg:min-h-[34px] inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#28665E] ${
+          className={`min-h-[34px] inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00C982] ${
             isSlow
-              ? 'bg-[#FDF5E8] hover:bg-[#FAEBCE] dark:bg-[#2F261A] dark:hover:bg-[#392E1F] text-[#9A5B13] dark:text-[#E6B472] border border-[#E5C9A3] dark:border-[#574328] font-semibold'
-              : 'bg-[#F3F1EC] hover:bg-[#E7E3DA] dark:bg-[#282C28] dark:hover:bg-[#313631] text-[#4A463F] dark:text-[#C5C0B5] border border-[#E2DDD3] dark:border-[#343A34]'
+              ? 'bg-[#FEF3C7] hover:bg-[#FDE68A] dark:bg-[#2E2516] dark:hover:bg-[#3A2E1B] text-[#9A5B13] dark:text-[#FBBF24] border border-[#F59E0B]/40 dark:border-[#FBBF24]/35 font-semibold'
+              : 'bg-[#F1F7F5] hover:bg-[#E4F2ED] dark:bg-[#19232E] dark:hover:bg-[#202D3B] text-[#475550] dark:text-[#B5C4BE] border border-[#DCE8E3] dark:border-[#283645]'
           }`}
         >
           <Gauge className="w-3.5 h-3.5 shrink-0 opacity-85" />
           <span className="font-mono-num">{isSlow ? '0.7x Lento' : '1x Normal'}</span>
         </button>
-
-        {onOpenPronunciation && (
-          <button
-            type="button"
-            data-testid="card-pronunciation-mic-front"
-            aria-pressed={isPronunciationOpen}
-            aria-label={`Treinar pronúncia de ${term}`}
-            title="Treinar pronúncia com avaliação acústica IA"
-            onClick={(e) => {
-              e.stopPropagation();
-              void triggerTap();
-              onOpenPronunciation();
-            }}
-            className={`min-h-[36px] lg:min-h-[34px] inline-flex items-center gap-1.5 px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#28665E] ${
-              isPronunciationOpen
-                ? 'bg-[#28665E] text-white dark:bg-[#2EA98C] dark:text-[#0E1715] border border-[#28665E] dark:border-[#2EA98C]'
-                : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1D302D] dark:hover:bg-[#253D39] text-[#1E4E47] dark:text-[#86CEC2] border border-[#C2DAD5] dark:border-[#2F4B46]'
-            }`}
-          >
-            <Mic className="w-3.5 h-3.5 shrink-0" />
-            <span>🎤 Treinar</span>
-          </button>
-        )}
       </div>
     </div>
   );

@@ -184,14 +184,14 @@ export const StudyView = memo(function StudyView({
       {/* Study Mode Context Strip — Streamlined on Mobile */}
       <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
-          <div className="inline-flex flex-wrap p-0.5 sm:p-1 rounded-xl bg-[#EAE6DD] dark:bg-[#1D201D] border border-[#DFDBD0] dark:border-[#2E332E]">
+          <div className="inline-flex flex-wrap p-0.5 sm:p-1 rounded-xl bg-[#E4F2ED] dark:bg-[#131B24] border border-[#10D990]/25 dark:border-[#38E5A5]/20">
             <button
               type="button"
               onClick={() => onChangeScope('selected')}
               className={`min-h-[34px] lg:min-h-[30px] px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 studyScope === 'selected'
-                  ? 'bg-white dark:bg-[#2C312C] text-[#1C1B18] dark:text-[#EBE7DE] shadow-2xs'
-                  : 'text-[#5C574E] dark:text-[#AFAAA0]'
+                  ? 'bg-white dark:bg-[#1E2B38] text-[#047857] dark:text-[#38E5A5] border border-[#00C982]/30 dark:border-[#38E5A5]/30 shadow-[0_2px_10px_rgba(16,217,144,0.16)]'
+                  : 'text-[#475550] dark:text-[#9CB0A9]'
               }`}
             >
               Objetivo{' '}
@@ -203,8 +203,8 @@ export const StudyView = memo(function StudyView({
               onClick={() => onChangeScope('decks')}
               className={`min-h-[34px] lg:min-h-[30px] px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 studyScope === 'decks'
-                  ? 'bg-white dark:bg-[#2C312C] text-[#1C1B18] dark:text-[#EBE7DE] shadow-2xs'
-                  : 'text-[#5C574E] dark:text-[#AFAAA0]'
+                  ? 'bg-white dark:bg-[#1E2B38] text-[#047857] dark:text-[#38E5A5] border border-[#00C982]/30 dark:border-[#38E5A5]/30 shadow-[0_2px_10px_rgba(16,217,144,0.16)]'
+                  : 'text-[#475550] dark:text-[#9CB0A9]'
               }`}
             >
               Conectados{' '}
@@ -216,8 +216,8 @@ export const StudyView = memo(function StudyView({
               onClick={() => onChangeScope('all')}
               className={`min-h-[34px] lg:min-h-[30px] px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 studyScope === 'all'
-                  ? 'bg-white dark:bg-[#2C312C] text-[#1C1B18] dark:text-[#EBE7DE] shadow-2xs'
-                  : 'text-[#5C574E] dark:text-[#AFAAA0]'
+                  ? 'bg-white dark:bg-[#1E2B38] text-[#047857] dark:text-[#38E5A5] border border-[#00C982]/30 dark:border-[#38E5A5]/30 shadow-[0_2px_10px_rgba(16,217,144,0.16)]'
+                  : 'text-[#475550] dark:text-[#9CB0A9]'
               }`}
             >
               Acervo{' '}
@@ -287,11 +287,11 @@ export const StudyView = memo(function StudyView({
         />
       )}
 
-      {/* Subtle Progress Line */}
+      {/* Neon Progress Line */}
       {cards.length > 0 && (
-        <div className="w-full h-1 rounded-full bg-[#E4E0D8] dark:bg-[#292D29] overflow-hidden">
+        <div className="w-full h-1.5 rounded-full bg-[#DCECE6] dark:bg-[#1B2531] overflow-visible relative">
           <div
-            className="h-full bg-[#28665E] dark:bg-[#357F74] transition-all duration-300 ease-out"
+            className="h-full rounded-full bg-gradient-to-r from-[#00C982] via-[#10D990] to-[#38E5A5] ewm-neon-progress transition-all duration-300 ease-out"
             style={{ width: `${progressPct}%` }}
           />
         </div>
@@ -363,7 +363,7 @@ export const StudyView = memo(function StudyView({
             >
               {/* FRONT FACE */}
               <div
-                className={`flashcard-face rounded-2xl sm:rounded-3xl border border-[#DFDAD0] dark:border-[#313831] ring-1 ring-black/[0.02] dark:ring-white/[0.04] bg-white dark:bg-[#202420] shadow-[0_8px_26px_-12px_rgba(28,27,24,0.14)] dark:shadow-[0_14px_32px_-12px_rgba(0,0,0,0.5)] p-4 sm:p-8 min-h-[288px] sm:min-h-[415px] flex flex-col justify-between ${
+                className={`flashcard-face rounded-2xl sm:rounded-3xl border ewm-surface-neon bg-white dark:bg-[#141B23] p-4 sm:p-8 min-h-[288px] sm:min-h-[415px] flex flex-col justify-between ${
                   isFlipped ? 'pointer-events-none' : ''
                 }`}
               >
@@ -441,7 +441,7 @@ export const StudyView = memo(function StudyView({
                 <div className="my-2.5 sm:my-5 text-center space-y-2 sm:space-y-3.5">
                   <h2
                     style={{ textWrap: 'balance' }}
-                    className="font-display text-[1.6rem] sm:text-4xl font-bold tracking-tight text-[#1C1B18] dark:text-[#EBE7DE] leading-[1.14]"
+                    className="font-display text-[1.7rem] sm:text-4xl font-extrabold tracking-tight text-[#121816] dark:text-[#F8FAFC] leading-[1.14]"
                   >
                     {currentCard.term}
                   </h2>
@@ -467,12 +467,12 @@ export const StudyView = memo(function StudyView({
 
                 {/* Two Real-Life English Sentences with US & UK Audio Choice Each */}
                 <div
-                  className="space-y-1.5 sm:space-y-2.5 pt-2.5 sm:pt-4 border-t border-[#ECE9E1] dark:border-[#2B312B]"
+                  className="space-y-1.5 sm:space-y-2.5 pt-2.5 sm:pt-4 border-t border-[#E2EFEA] dark:border-[#22303E]"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div className="flex items-start justify-between gap-2 sm:gap-3 rounded-xl sm:rounded-2xl bg-[#FAF9F6] dark:bg-[#282D28] border border-[#EFECE4] dark:border-[#323832] px-3 py-2 sm:px-4 sm:py-3">
-                    <div className="text-[12.5px] sm:text-sm text-[#1C1B18] dark:text-[#E8E4DB] leading-snug sm:leading-relaxed">
-                      <span className="font-mono-num text-[10px] sm:text-[11px] font-semibold text-[#28665E] dark:text-[#68B4A8] mr-1.5 sm:mr-2">
+                  <div className="flex items-start justify-between gap-2 sm:gap-3 rounded-xl sm:rounded-2xl bg-[#F6FBF9] dark:bg-[#19232E] border border-[#DCEAE4] dark:border-[#273646] px-3 py-2 sm:px-4 sm:py-3">
+                    <div className="text-[12.5px] sm:text-sm text-[#121816] dark:text-[#E8F0EC] leading-snug sm:leading-relaxed">
+                      <span className="font-mono-num text-[10px] sm:text-[11px] font-bold text-[#00C982] dark:text-[#38E5A5] mr-1.5 sm:mr-2">
                         01
                       </span>
                       <span>&ldquo;{currentCard.exampleEn}&rdquo;</span>
@@ -493,9 +493,9 @@ export const StudyView = memo(function StudyView({
                     />
                   </div>
 
-                  <div className="flex items-start justify-between gap-2 sm:gap-3 rounded-xl sm:rounded-2xl bg-[#FAF9F6] dark:bg-[#282D28] border border-[#EFECE4] dark:border-[#323832] px-3 py-2 sm:px-4 sm:py-3">
-                    <div className="text-[12.5px] sm:text-sm text-[#1C1B18] dark:text-[#E8E4DB] leading-snug sm:leading-relaxed">
-                      <span className="font-mono-num text-[10px] sm:text-[11px] font-semibold text-[#6B655C] dark:text-[#AFAAA0] mr-1.5 sm:mr-2">
+                  <div className="flex items-start justify-between gap-2 sm:gap-3 rounded-xl sm:rounded-2xl bg-[#F6FBF9] dark:bg-[#19232E] border border-[#DCEAE4] dark:border-[#273646] px-3 py-2 sm:px-4 sm:py-3">
+                    <div className="text-[12.5px] sm:text-sm text-[#121816] dark:text-[#E8F0EC] leading-snug sm:leading-relaxed">
+                      <span className="font-mono-num text-[10px] sm:text-[11px] font-semibold text-[#52605B] dark:text-[#8FA49C] mr-1.5 sm:mr-2">
                         02
                       </span>
                       <span>&ldquo;{secondExample.en}&rdquo;</span>
@@ -537,7 +537,7 @@ export const StudyView = memo(function StudyView({
 
               {/* BACK FACE */}
               <div
-                className={`flashcard-face flashcard-face-back absolute inset-0 rounded-2xl sm:rounded-3xl border border-[#C9DBD7] dark:border-[#334A45] ring-1 ring-black/[0.02] dark:ring-white/[0.04] bg-[#FCFBF8] dark:bg-[#222723] shadow-[0_8px_26px_-12px_rgba(28,27,24,0.14)] dark:shadow-[0_14px_32px_-12px_rgba(0,0,0,0.5)] p-4 sm:p-8 flex flex-col justify-between overflow-y-auto ${
+                className={`flashcard-face flashcard-face-back absolute inset-0 rounded-2xl sm:rounded-3xl border ewm-surface-neon bg-[#FAFDFC] dark:bg-[#141C25] p-4 sm:p-8 flex flex-col justify-between overflow-y-auto ${
                   !isFlipped ? 'pointer-events-none' : ''
                 }`}
               >

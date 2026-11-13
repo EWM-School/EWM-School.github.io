@@ -14,10 +14,11 @@ import {
   triggerTap,
 } from '../../services/platform/hapticsService';
 import {
+  getSelectedVoiceLocale,
   speakEnglishText,
   stopCurrentAudio,
-  toggleSpeakEnglishText,
 } from '../../services/platform/speechService';
+import type { EnglishAccent } from '../../types/flashcard';
 import {
   SURVIVAL_INITIAL_HEARTS,
   buildSurvivalChallenge,
@@ -72,6 +73,9 @@ export const SurvivalChallengeGame = memo(function SurvivalChallengeGame({
   const [challenge, setChallenge] = useState<SurvivalChallenge>(() =>
     buildSurvivalChallenge(pickCardAtStep(0), allReferenceCards, 0)
   );
+  const challengeRef = useRef<SurvivalChallenge>(challenge);
+  challengeRef.current = challenge;
+
   const [hearts, setHearts] = useState(SURVIVAL_INITIAL_HEARTS);
   const [currentStreak, setCurrentStreak] = useState(0);
   const [bestRunStreak, setBestRunStreak] = useState(0);
@@ -98,17 +102,30 @@ export const SurvivalChallengeGame = memo(function SurvivalChallengeGame({
     };
   }, []);
 
-  // Auto-play audio when a `listening` challenge appears
+  // Auto-play audio ONCE when a `listening` challenge opens, using the student's preferred accent
+  const activeChallengeId = challenge.challengeId;
   useEffect(() => {
-    if (isGameOver || challenge.kind !== 'listening' || !challenge.spokenText) return;
-    if (autoSpokenIdRef.current === challenge.challengeId) return;
-    autoSpokenIdRef.current = challenge.challengeId;
+    const cur = challengeRef.current;
+    if (isGameOver || cur.kind !== 'listening' || !cur.spokenText) return;
+    if (autoSpokenIdRef.current === activeChallengeId) return;
+    autoSpokenIdRef.current = activeChallengeId;
 
-    void speakEnglishText(challenge.spokenText, challenge.accent, {
+    const preferredAccent: EnglishAccent = getSelectedVoiceLocale() || cur.accent;
+    void speakEnglishText(cur.spokenText, preferredAccent, {
       role: 'term',
-      sourceId: `survival-audio-${challenge.challengeId}`,
+      sourceId: `survival-audio-${preferredAccent}-${cur.challengeId}`,
     });
-  }, [challenge, isGameOver]);
+  }, [activeChallengeId, isGameOver]);
+
+  const handlePlayListeningAccent = useCallback((accent: EnglishAccent) => {
+    const cur = challengeRef.current;
+    if (!cur.spokenText) return;
+    void triggerTap();
+    void speakEnglishText(cur.spokenText, accent, {
+      role: cur.kind === 'cloze' ? 'sentence' : 'term',
+      sourceId: `survival-audio-${accent}-${cur.challengeId}`,
+    });
+  }, []);
 
   const finishSurvivalRun = useCallback(
     (finalCorrect: number, finalMistakes: number, finalBestRun: number) => {
@@ -216,7 +233,7 @@ export const SurvivalChallengeGame = memo(function SurvivalChallengeGame({
     setIsGameOver(false);
   }, [allReferenceCards, pool]);
 
-  // Desktop shortcuts: [1..4] select option, [Enter] continue, [R] replay audio
+  // Desktop shortcuts: [1..4] select option, [Enter] continue, [U]/[R] US audio, [K] UK audio
   useEffect(() => {
     if (isGameOver) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -231,12 +248,15 @@ export const SurvivalChallengeGame = memo(function SurvivalChallengeGame({
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-      if (e.key.toLowerCase() === 'r' && challenge.spokenText) {
+      const lower = e.key.toLowerCase();
+      if ((lower === 'r' || lower === 'u') && challenge.spokenText) {
         e.preventDefault();
-        void toggleSpeakEnglishText(challenge.spokenText, challenge.accent, {
-          role: challenge.kind === 'cloze' ? 'sentence' : 'term',
-          sourceId: `survival-audio-${challenge.challengeId}`,
-        });
+        handlePlayListeningAccent('us');
+        return;
+      }
+      if (lower === 'k' && challenge.spokenText) {
+        e.preventDefault();
+        handlePlayListeningAccent('uk');
         return;
       }
 
@@ -254,7 +274,7 @@ export const SurvivalChallengeGame = memo(function SurvivalChallengeGame({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [challenge, handleContinue, handleSelectOption, isAnswered, isGameOver]);
+  }, [challenge, handleContinue, handlePlayListeningAccent, handleSelectOption, isAnswered, isGameOver]);
 
   if (isGameOver) {
     const beatRecord = Boolean(finishedOutcome?.beatPreviousRecord);
@@ -287,16 +307,27 @@ export const SurvivalChallengeGame = memo(function SurvivalChallengeGame({
   const chosenOption = challenge.options.find((o) => o.id === selectedOptionId);
   const wasRight = Boolean(chosenOption?.isCorrect);
 
-  const audioBtnState = challenge.spokenText
+  const usBtnState = challenge.spokenText
     ? getButtonState({
         text: challenge.spokenText,
-        accent: challenge.accent,
-        sourceId: `survival-audio-${challenge.challengeId}`,
+        accent: 'us',
+        sourceId: `survival-audio-us-${challenge.challengeId}`,
+      })
+    : 'idle';
+
+  const ukBtnState = challenge.spokenText
+    ? getButtonState({
+        text: challenge.spokenText,
+        accent: 'uk',
+        sourceId: `survival-audio-uk-${challenge.challengeId}`,
       })
     : 'idle';
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 ewm-pillar-enter select-none">
+    <div
+      data-challenge-id={challenge.challengeId}
+      className="max-w-2xl mx-auto space-y-4 ewm-pillar-enter select-none"
+    >
       <MiniGameTopHud
         title="Desafio Sobrevivência"
         subtitle="Mantenha suas 3 vidas e supere seu recorde pessoal de sequência"
@@ -309,7 +340,7 @@ export const SurvivalChallengeGame = memo(function SurvivalChallengeGame({
             {/* 3 Hearts HUD */}
             <div
               aria-label={`${hearts} de ${SURVIVAL_INITIAL_HEARTS} vidas restantes`}
-              className="min-h-[36px] inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border border-[#F3D2CF] dark:border-[#4A2624] bg-[#FFF8F7] dark:bg-[#281918]"
+              className="min-h-[36px] inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border border-[#F8C7CE] dark:border-[#FB7185]/30 bg-[#FFF5F6] dark:bg-[#28151B]"
             >
               {Array.from({ length: SURVIVAL_INITIAL_HEARTS }).map((_, idx) => {
                 const alive = idx < hearts;
@@ -318,8 +349,8 @@ export const SurvivalChallengeGame = memo(function SurvivalChallengeGame({
                     key={idx}
                     className={`w-4 h-4 transition-all ${
                       alive
-                        ? 'text-[#E11D48] fill-[#E11D48]'
-                        : 'text-[#C8C2B8] dark:text-[#4B463F] scale-90'
+                        ? 'text-[#F43F5E] fill-[#F43F5E] drop-shadow-[0_0_6px_rgba(244,63,94,0.45)]'
+                        : 'text-[#CBD5E1] dark:text-[#475569] scale-90'
                     }`}
                   />
                 );
@@ -327,7 +358,7 @@ export const SurvivalChallengeGame = memo(function SurvivalChallengeGame({
             </div>
 
             {/* Combo Streak Pill */}
-            <div className="min-h-[36px] inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border border-[#EAD9B8] dark:border-[#4A3B22] bg-[#FFFDF8] dark:bg-[#262016] font-mono-num text-xs font-bold text-[#B45309] dark:text-[#FBBF24]">
+            <div className="min-h-[36px] inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border border-[#FDE68A] dark:border-[#FBBF24]/30 bg-[#FFFBEB] dark:bg-[#261E12] font-mono-num text-xs font-bold text-[#B45309] dark:text-[#FBBF24]">
               <Flame className="w-3.5 h-3.5 fill-current" />
               <span>{currentStreak}</span>
             </div>
@@ -336,8 +367,8 @@ export const SurvivalChallengeGame = memo(function SurvivalChallengeGame({
       />
 
       {/* Personal Best Streak Bar */}
-      <div className="flex items-center justify-between gap-2 px-3.5 py-2 rounded-2xl border border-[#E6E2D8] dark:border-[#2C332E] bg-white/80 dark:bg-[#1E231F] text-xs">
-        <span className="inline-flex items-center gap-1.5 font-semibold text-[#5C574E] dark:text-[#B5C0B9]">
+      <div className="flex items-center justify-between gap-2 px-3.5 py-2 rounded-2xl border border-[#DCE8E3] dark:border-[#38E5A5]/20 bg-white/90 dark:bg-[#131A22] text-xs">
+        <span className="inline-flex items-center gap-1.5 font-semibold text-[#475550] dark:text-[#B5C4BE]">
           <Trophy className="w-3.5 h-3.5 text-[#D97706] dark:text-[#FBBF24]" />
           <span>Recorde Pessoal (Best Streak):</span>
         </span>
@@ -352,64 +383,86 @@ export const SurvivalChallengeGame = memo(function SurvivalChallengeGame({
       {/* Challenge Card */}
       <div
         key={`surv-card-${shakeKey}`}
-        className={`rounded-3xl border border-[#DFDAD0] dark:border-[#313831] bg-white dark:bg-[#202420] p-4 sm:p-6 shadow-xs space-y-5 ${
+        className={`rounded-3xl border border-[#D4E7DF] dark:border-[#38E5A5]/22 bg-white dark:bg-[#131A22] p-4 sm:p-6 shadow-xs space-y-5 ${
           shakeKey > 0 && isAnswered && !wasRight ? 'ewm-micro-shake' : ''
         }`}
       >
         <div className="space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#EAF3F1] dark:bg-[#1C332D] text-[#225851] dark:text-[#86CEC2] text-[11px] font-bold">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#ECFDF5] dark:bg-[#142E25] border border-[#00C982]/25 dark:border-[#38E5A5]/25 text-[#065F46] dark:text-[#38E5A5] text-[11px] font-bold">
               {challenge.promptTitlePt}
             </span>
 
-            <span className="text-[11px] text-[#6B655C] dark:text-[#9CA49E]">
+            <span className="text-[11px] text-[#52605B] dark:text-[#94A9A1]">
               {challenge.card.category} · {challenge.card.subtopic}
             </span>
           </div>
 
           {challenge.kind === 'listening' && challenge.spokenText ? (
-            <div className="rounded-2xl border border-[#C6DBD7] dark:border-[#2B433D] bg-[#F3FAF8] dark:bg-[#182723] p-4 flex flex-col items-center text-center space-y-2.5">
-              <button
-                type="button"
-                aria-pressed={audioBtnState !== 'idle'}
-                aria-busy={audioBtnState === 'loading'}
-                onClick={() => {
-                  void triggerTap();
-                  void toggleSpeakEnglishText(challenge.spokenText!, challenge.accent, {
-                    role: 'term',
-                    sourceId: `survival-audio-${challenge.challengeId}`,
-                  });
-                }}
-                className={`min-h-[48px] inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-[#28665E] hover:bg-[#1F524B] text-white text-sm font-bold cursor-pointer ${
-                  audioBtnState === 'loading'
-                    ? 'ewm-audio-loading'
-                    : audioBtnState === 'playing'
-                    ? 'ewm-audio-playing'
-                    : ''
-                }`}
-              >
-                <AudioStatusIcon
-                  state={audioBtnState}
-                  idleClassName="w-4.5 h-4.5"
-                  activeClassName="w-4.5 h-4"
-                />
-                <span>
-                  🔊 Ouvir Áudio ({challenge.accent === 'uk' ? '🇬🇧 UK' : '🇺🇸 US'})
-                </span>
-              </button>
-              <p className="text-xs text-[#524E46] dark:text-[#B5C0B9]">
+            <div className="rounded-2xl border border-[#BCE8D6] dark:border-[#38E5A5]/25 bg-gradient-to-br from-[#F1FBF7] to-[#E6F7F0] dark:from-[#142520] dark:to-[#0F1B18] p-4 flex flex-col items-center text-center space-y-3">
+              <div className="w-full max-w-md grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  data-testid="survival-listen-us"
+                  aria-pressed={usBtnState !== 'idle'}
+                  aria-busy={usBtnState === 'loading'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePlayListeningAccent('us');
+                  }}
+                  className={`min-h-[48px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold border cursor-pointer transition-all ${
+                    usBtnState === 'loading'
+                      ? 'ewm-audio-loading border-[#00C982] dark:border-[#38E5A5] bg-[#00C982] dark:bg-[#38E5A5] text-[#05291D]'
+                      : usBtnState === 'playing'
+                      ? 'ewm-audio-playing border-[#00C982] dark:border-[#38E5A5] bg-[#059669] dark:bg-[#10B981] text-white shadow-[0_0_14px_rgba(56,229,165,0.38)]'
+                      : 'border-[#00C982]/40 dark:border-[#38E5A5]/35 bg-white hover:bg-[#ECFDF5] dark:bg-[#182924] dark:hover:bg-[#1E352E] text-[#0F3D30] dark:text-[#ECFDF5]'
+                  }`}
+                >
+                  <AudioStatusIcon
+                    state={usBtnState}
+                    idleClassName="w-4 h-4 text-[#059669] dark:text-[#38E5A5]"
+                    activeClassName="w-4 h-4"
+                  />
+                  <span>🇺🇸 Ouvir US</span>
+                </button>
+
+                <button
+                  type="button"
+                  data-testid="survival-listen-uk"
+                  aria-pressed={ukBtnState !== 'idle'}
+                  aria-busy={ukBtnState === 'loading'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePlayListeningAccent('uk');
+                  }}
+                  className={`min-h-[48px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold border cursor-pointer transition-all ${
+                    ukBtnState === 'loading'
+                      ? 'ewm-audio-loading border-[#38BDF8] bg-[#0284C7] text-white'
+                      : ukBtnState === 'playing'
+                      ? 'ewm-audio-playing border-[#38BDF8] bg-[#0284C7] text-white shadow-[0_0_14px_rgba(56,189,248,0.35)]'
+                      : 'border-[#38BDF8]/40 dark:border-[#38BDF8]/35 bg-white hover:bg-[#F0F9FF] dark:bg-[#16242E] dark:hover:bg-[#1C2F3C] text-[#0C4A6E] dark:text-[#E0F2FE]'
+                  }`}
+                >
+                  <AudioStatusIcon
+                    state={ukBtnState}
+                    idleClassName="w-4 h-4 text-[#0284C7] dark:text-[#38BDF8]"
+                    activeClassName="w-4 h-4"
+                  />
+                  <span>🇬🇧 Ouvir UK</span>
+                </button>
+              </div>
+
+              <p className="text-xs text-[#475550] dark:text-[#A7BDB5]">
                 {challenge.promptPrimary}
               </p>
             </div>
           ) : (
             <div className="space-y-1.5 pt-1">
-              <h3 className="font-display text-lg sm:text-xl font-bold text-[#1C1B18] dark:text-[#F4F7F6] leading-snug">
-                {challenge.kind === 'cloze'
-                  ? `“${challenge.promptPrimary}”`
-                  : `“${challenge.promptPrimary}”`}
+              <h3 className="font-display text-lg sm:text-xl font-bold text-[#121816] dark:text-[#F4F9F7] leading-snug">
+                &ldquo;{challenge.promptPrimary}&rdquo;
               </h3>
               {challenge.promptSecondaryPt && (
-                <p className="text-xs sm:text-sm text-[#5C574E] dark:text-[#B5C0B9]">
+                <p className="text-xs sm:text-sm text-[#52605B] dark:text-[#9CB0A9]">
                   {challenge.kind === 'cloze'
                     ? `Sentido: ${challenge.promptSecondaryPt}`
                     : `Dica: ${challenge.promptSecondaryPt}`}
@@ -423,17 +476,17 @@ export const SurvivalChallengeGame = memo(function SurvivalChallengeGame({
         <div className="space-y-2">
           {challenge.options.map((opt, idx) => {
             let cls =
-              'border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#282D28] text-[#1C1B18] dark:text-[#EBE7DE] hover:border-[#28665E]/55';
+              'border-[#DDE8E3] dark:border-[#263340] bg-[#F8FBFA] dark:bg-[#19222C] text-[#121816] dark:text-[#EEF4F2] hover:border-[#00C982] dark:hover:border-[#38E5A5]/60';
             if (isAnswered) {
               if (opt.isCorrect) {
                 cls =
-                  'border-[#38E5A5] bg-[#ECFDF5] dark:bg-[#183127] text-[#0F5132] dark:text-[#C5ECDA]';
+                  'border-[#00C982] dark:border-[#38E5A5] bg-[#ECFDF5] dark:bg-[#132E24] text-[#064E3B] dark:text-[#D1FAE5] shadow-[0_0_14px_rgba(56,229,165,0.2)]';
               } else if (opt.id === selectedOptionId) {
                 cls =
-                  'border-[#B5443C] bg-[#FDF2F2] dark:bg-[#311F1E] text-[#8F312B] dark:text-[#F4BCB8]';
+                  'border-[#E11D48]/70 bg-[#FFF1F2] dark:bg-[#311820] text-[#9F1239] dark:text-[#FECDD3]';
               } else {
                 cls =
-                  'border-[#ECE9E1] dark:border-[#2A2F2A] bg-[#FAF9F6]/60 dark:bg-[#212421] text-[#857F74] dark:text-[#7D786F] opacity-65';
+                  'border-[#E8EEEB] dark:border-[#1E2832] bg-[#F8FBFA]/60 dark:bg-[#151D26] text-[#83918C] dark:text-[#6B7A88] opacity-65';
               }
             }
 
@@ -453,10 +506,10 @@ export const SurvivalChallengeGame = memo(function SurvivalChallengeGame({
                 </div>
 
                 {isAnswered && opt.isCorrect && (
-                  <CheckCircle2 className="w-4.5 h-4.5 text-[#10B981] shrink-0" />
+                  <CheckCircle2 className="w-4.5 h-4.5 text-[#10B981] dark:text-[#38E5A5] shrink-0" />
                 )}
                 {isAnswered && opt.id === selectedOptionId && !opt.isCorrect && (
-                  <XCircle className="w-4.5 h-4.5 text-[#B5443C] shrink-0" />
+                  <XCircle className="w-4.5 h-4.5 text-[#E11D48] shrink-0" />
                 )}
               </button>
             );
@@ -468,11 +521,11 @@ export const SurvivalChallengeGame = memo(function SurvivalChallengeGame({
           <div
             className={`rounded-2xl border p-3.5 flex flex-wrap items-center justify-between gap-3 ewm-pillar-enter ${
               wasRight
-                ? 'border-[#38E5A5]/60 bg-[#ECFDF5] dark:bg-[#163026]'
-                : 'border-[#E5C6C3] dark:border-[#4A2826] bg-[#FDF6F5] dark:bg-[#2A1B1A]'
+                ? 'border-[#00C982]/60 dark:border-[#38E5A5]/60 bg-[#ECFDF5] dark:bg-[#122B22]'
+                : 'border-[#FECDD3] dark:border-[#FB7185]/35 bg-[#FFF1F2] dark:bg-[#2B171E]'
             }`}
           >
-            <p className="text-xs sm:text-[13px] font-semibold text-[#1C1B18] dark:text-[#F4F7F6] flex-1 min-w-[200px]">
+            <p className="text-xs sm:text-[13px] font-semibold text-[#121816] dark:text-[#F4F9F7] flex-1 min-w-[200px]">
               {wasRight
                 ? `🔥 Sequência em ${currentStreak}! ${challenge.explanationLinePt}`
                 : `💔 -1 vida · ${challenge.explanationLinePt}`}
@@ -481,7 +534,7 @@ export const SurvivalChallengeGame = memo(function SurvivalChallengeGame({
             <button
               type="button"
               onClick={handleContinue}
-              className="min-h-[42px] inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#28665E] hover:bg-[#1F524B] text-white text-xs sm:text-sm font-semibold cursor-pointer ml-auto"
+              className="min-h-[42px] inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#00C982] hover:bg-[#05B374] dark:bg-[#38E5A5] dark:hover:bg-[#2AD394] text-[#05291D] text-xs sm:text-sm font-bold cursor-pointer ml-auto shadow-[0_0_14px_rgba(56,229,165,0.28)]"
             >
               <span>{hearts <= 0 ? 'Ver Placar Final' : 'Próximo Desafio'}</span>
               <ArrowRight className="w-4 h-4" />

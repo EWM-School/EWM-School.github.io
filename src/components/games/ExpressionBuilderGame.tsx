@@ -9,7 +9,6 @@ import {
 import {
   speakEnglishText,
   stopCurrentAudio,
-  toggleSpeakEnglishText,
 } from '../../services/platform/speechService';
 import {
   buildExpressionBuilderRound,
@@ -298,11 +297,11 @@ export const ExpressionBuilderGame = memo(function ExpressionBuilderGame({
         onBackToArena={onBackToArena}
       />
 
-      <div className="rounded-3xl border border-[#DFDAD0] dark:border-[#313831] bg-white dark:bg-[#202420] p-4 sm:p-6 shadow-xs space-y-5">
+      <div className="rounded-3xl border border-[#D4E7DF] dark:border-[#38E5A5]/22 bg-white dark:bg-[#131A22] p-4 sm:p-6 shadow-xs space-y-5">
         {/* Prompt Header + Optional US/UK Audio Hint */}
         <div className="space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#F2EFE8] dark:bg-[#2A2F2A] text-[#5C574E] dark:text-[#B9B4AA]">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#EFF7F4] dark:bg-[#1A2632] text-[#475550] dark:text-[#A8B8B2]">
               <span>{currentRound.card.category}</span>
               <span aria-hidden="true">·</span>
               <span>{currentRound.card.subtopic}</span>
@@ -316,7 +315,7 @@ export const ExpressionBuilderGame = memo(function ExpressionBuilderGame({
                 onClick={(e) => {
                   e.stopPropagation();
                   void triggerTap();
-                  void toggleSpeakEnglishText(currentRound.targetEnglish, 'us', {
+                  void speakEnglishText(currentRound.targetEnglish, 'us', {
                     role: currentRound.speechRole,
                     sourceId: `builder-hint-us-${currentRound.roundId}`,
                   });
@@ -325,8 +324,8 @@ export const ExpressionBuilderGame = memo(function ExpressionBuilderGame({
                   usHintState
                 )} ${
                   usHintState !== 'idle'
-                    ? 'bg-[#28665E] border-[#28665E] text-white'
-                    : 'bg-[#EAF3F1] dark:bg-[#1E312E] border-[#C6DBD7] dark:border-[#2F4B46] text-[#225851] dark:text-[#86CEC2]'
+                    ? 'bg-[#00C982] dark:bg-[#38E5A5] border-[#00C982] dark:border-[#38E5A5] text-[#05291D] font-bold'
+                    : 'bg-[#ECFDF5] dark:bg-[#152922] border-[#00C982]/35 dark:border-[#38E5A5]/30 text-[#065F46] dark:text-[#6EE7B7]'
                 }`}
               >
                 <AudioStatusIcon
@@ -334,7 +333,7 @@ export const ExpressionBuilderGame = memo(function ExpressionBuilderGame({
                   idleClassName="w-3.5 h-3.5"
                   activeClassName="w-3.5 h-3"
                 />
-                <span>Dica US</span>
+                <span>🇺🇸 Dica US</span>
               </button>
 
               <button
@@ -344,7 +343,7 @@ export const ExpressionBuilderGame = memo(function ExpressionBuilderGame({
                 onClick={(e) => {
                   e.stopPropagation();
                   void triggerTap();
-                  void toggleSpeakEnglishText(currentRound.targetEnglish, 'uk', {
+                  void speakEnglishText(currentRound.targetEnglish, 'uk', {
                     role: currentRound.speechRole,
                     sourceId: `builder-hint-uk-${currentRound.roundId}`,
                   });
@@ -353,8 +352,8 @@ export const ExpressionBuilderGame = memo(function ExpressionBuilderGame({
                   ukHintState
                 )} ${
                   ukHintState !== 'idle'
-                    ? 'bg-[#243B53] border-[#243B53] text-white'
-                    : 'bg-[#EDF1F5] dark:bg-[#1E2630] border-[#C9D5E2] dark:border-[#334354] text-[#243B53] dark:text-[#9CC3E6]'
+                    ? 'bg-[#0284C7] border-[#38BDF8] text-white font-bold'
+                    : 'bg-[#F0F9FF] dark:bg-[#162531] border-[#38BDF8]/35 dark:border-[#38BDF8]/30 text-[#0C4A6E] dark:text-[#7DD3FC]'
                 }`}
               >
                 <AudioStatusIcon
@@ -362,20 +361,20 @@ export const ExpressionBuilderGame = memo(function ExpressionBuilderGame({
                   idleClassName="w-3.5 h-3.5"
                   activeClassName="w-3.5 h-3"
                 />
-                <span>Dica UK</span>
+                <span>🇬🇧 Dica UK</span>
               </button>
             </div>
           </div>
 
           <div className="space-y-1">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-[#28665E] dark:text-[#68B4A8]">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#059669] dark:text-[#38E5A5]">
               Como dizer em inglês natural:
             </p>
-            <h3 className="font-display text-lg sm:text-xl font-bold text-[#1C1B18] dark:text-[#F4F7F6] leading-snug">
+            <h3 className="font-display text-lg sm:text-xl font-bold text-[#121816] dark:text-[#F4F9F7] leading-snug">
               &ldquo;{currentRound.promptPt}&rdquo;
             </h3>
             {currentRound.helperContextPt && (
-              <p className="text-xs text-[#6B655C] dark:text-[#A4A096]">
+              <p className="text-xs text-[#52605B] dark:text-[#9CB0A9]">
                 {currentRound.helperContextPt}
               </p>
             )}

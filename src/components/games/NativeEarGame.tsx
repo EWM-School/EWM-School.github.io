@@ -9,8 +9,8 @@ import {
 import {
   speakEnglishText,
   stopCurrentAudio,
-  toggleSpeakEnglishText,
 } from '../../services/platform/speechService';
+import type { EnglishAccent } from '../../types/flashcard';
 import {
   NATIVE_EAR_QUESTIONS_PER_MATCH,
   NATIVE_EAR_SECONDS_PER_QUESTION,
@@ -38,8 +38,8 @@ interface NativeEarGameProps {
 
 const ACCENT_MODES: { key: NativeEarAccentMode; label: string }[] = [
   { key: 'mixed', label: '🌎 Misto Realista' },
-  { key: 'us', label: '🇺🇸 US' },
-  { key: 'uk', label: '🇬🇧 UK' },
+  { key: 'us', label: '🇺🇸 Auto US' },
+  { key: 'uk', label: '🇬🇧 Auto UK' },
 ];
 
 export const NativeEarGame = memo(function NativeEarGame({
@@ -53,6 +53,10 @@ export const NativeEarGame = memo(function NativeEarGame({
   const { activeAudio, getButtonState } = useAudioPlaybackState();
 
   const [accentMode, setAccentMode] = useState<NativeEarAccentMode>('mixed');
+  const accentModeRef = useRef<NativeEarAccentMode>('mixed');
+
+  // Round deck is generated ONCE on mount (and only reset on explicit "Jogar Novamente").
+  // Switching accent or replaying audio NEVER mutates or regenerates `questions` or `qIdx`!
   const [questions, setQuestions] = useState<NativeEarQuestion[]>(() =>
     buildNativeEarQuestions(
       pool,
@@ -76,6 +80,9 @@ export const NativeEarGame = memo(function NativeEarGame({
   );
 
   const currentQuestion = questions[qIdx] ?? null;
+  const currentQuestionRef = useRef<NativeEarQuestion | null>(currentQuestion);
+  currentQuestionRef.current = currentQuestion;
+
   const isAnswered = selectedOptionId !== null || timedOut;
   const isAudioLoading = activeAudio?.status === 'loading';
 
@@ -87,21 +94,26 @@ export const NativeEarGame = memo(function NativeEarGame({
     };
   }, []);
 
-  // Immediately play pure neural audio when each round starts
+  // Auto-play neural audio ONCE when a new `questionId` opens (never re-runs on accent toggle or audio replay)
+  const activeQuestionId = currentQuestion?.questionId ?? null;
   useEffect(() => {
-    if (isFinished || !currentQuestion) return;
-    if (autoSpokenQuestionIdRef.current === currentQuestion.questionId) return;
-    autoSpokenQuestionIdRef.current = currentQuestion.questionId;
+    const q = currentQuestionRef.current;
+    if (isFinished || !q || !activeQuestionId) return;
+    if (autoSpokenQuestionIdRef.current === activeQuestionId) return;
+    autoSpokenQuestionIdRef.current = activeQuestionId;
 
-    void speakEnglishText(currentQuestion.spokenText, currentQuestion.accent, {
+    const initialAccent: EnglishAccent =
+      accentModeRef.current === 'mixed' ? q.accent : accentModeRef.current;
+
+    void speakEnglishText(q.spokenText, initialAccent, {
       role: 'term',
-      sourceId: `native-ear-replay-${currentQuestion.questionId}`,
+      sourceId: `native-ear-${initialAccent}-${q.questionId}`,
     });
-  }, [currentQuestion, isFinished]);
+  }, [activeQuestionId, isFinished]);
 
-  // Balanced 12s countdown per round (pauses cleanly while neural TTS is loading on cold start!)
+  // Balanced 12s countdown per round (pauses cleanly while cold-start neural TTS is loading!)
   useEffect(() => {
-    if (isFinished || !currentQuestion || isAnswered || isAudioLoading) return;
+    if (isFinished || !activeQuestionId || isAnswered || isAudioLoading) return;
 
     const timer = globalThis.setInterval(() => {
       setSecondsLeft((prev) => {
@@ -118,33 +130,37 @@ export const NativeEarGame = memo(function NativeEarGame({
     }, 1000);
 
     return () => globalThis.clearInterval(timer);
-  }, [currentQuestion, isAnswered, isAudioLoading, isFinished]);
+  }, [activeQuestionId, isAnswered, isAudioLoading, isFinished]);
 
+  // Switching auto-play preference NEVER changes the current card, options, or round index!
   const handleSelectAccentMode = useCallback(
     (nextMode: NativeEarAccentMode) => {
-      if (nextMode === accentMode) return;
       void triggerTap();
-      stopCurrentAudio();
-      autoSpokenQuestionIdRef.current = null;
+      accentModeRef.current = nextMode;
       setAccentMode(nextMode);
-      setQuestions(
-        buildNativeEarQuestions(
-          pool,
-          allReferenceCards,
-          nextMode,
-          NATIVE_EAR_QUESTIONS_PER_MATCH
-        )
-      );
-      setQIdx(0);
-      setSecondsLeft(NATIVE_EAR_SECONDS_PER_QUESTION);
-      setSelectedOptionId(null);
-      setTimedOut(false);
-      setCorrectCount(0);
-      setMistakesCount(0);
-      setIsFinished(false);
-      setFinishedOutcome(null);
+
+      const q = currentQuestionRef.current;
+      if (q && (nextMode === 'us' || nextMode === 'uk')) {
+        void speakEnglishText(q.spokenText, nextMode, {
+          role: 'term',
+          sourceId: `native-ear-${nextMode}-${q.questionId}`,
+        });
+      }
     },
-    [accentMode, allReferenceCards, pool]
+    []
+  );
+
+  const handlePlayAccent = useCallback(
+    (accent: EnglishAccent) => {
+      const q = currentQuestionRef.current;
+      if (!q) return;
+      void triggerTap();
+      void speakEnglishText(q.spokenText, accent, {
+        role: 'term',
+        sourceId: `native-ear-${accent}-${q.questionId}`,
+      });
+    },
+    []
   );
 
   const handleChooseOption = useCallback(
@@ -196,7 +212,7 @@ export const NativeEarGame = memo(function NativeEarGame({
       buildNativeEarQuestions(
         pool,
         allReferenceCards,
-        accentMode,
+        accentModeRef.current,
         NATIVE_EAR_QUESTIONS_PER_MATCH
       )
     );
@@ -208,9 +224,9 @@ export const NativeEarGame = memo(function NativeEarGame({
     setMistakesCount(0);
     setFinishedOutcome(null);
     setIsFinished(false);
-  }, [accentMode, allReferenceCards, pool]);
+  }, [allReferenceCards, pool]);
 
-  // Desktop shortcuts: [R] replay audio, [1..4] select option, [Enter] next
+  // Desktop shortcuts: [U] hear US, [K] hear UK, [R] replay US, [1..4] select option, [Enter] next
   useEffect(() => {
     if (isFinished || !currentQuestion) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -225,12 +241,15 @@ export const NativeEarGame = memo(function NativeEarGame({
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-      if (e.key.toLowerCase() === 'r') {
+      const lower = e.key.toLowerCase();
+      if (lower === 'u' || lower === 'r') {
         e.preventDefault();
-        void toggleSpeakEnglishText(currentQuestion.spokenText, currentQuestion.accent, {
-          role: 'term',
-          sourceId: `native-ear-replay-${currentQuestion.questionId}`,
-        });
+        handlePlayAccent('us');
+        return;
+      }
+      if (lower === 'k') {
+        e.preventDefault();
+        handlePlayAccent('uk');
         return;
       }
 
@@ -249,15 +268,13 @@ export const NativeEarGame = memo(function NativeEarGame({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [currentQuestion, handleChooseOption, handleNextQuestion, isAnswered, isFinished]);
+  }, [currentQuestion, handleChooseOption, handleNextQuestion, handlePlayAccent, isAnswered, isFinished]);
 
   if (isFinished) {
     return (
       <MiniGameResultSummary
         title="Ouvido de Nativo Concluído!"
-        subtitle={`Compreensão auditiva treinada no modo ${
-          accentMode === 'us' ? '🇺🇸 US' : accentMode === 'uk' ? '🇬🇧 UK' : '🌎 Misto US & UK'
-        }.`}
+        subtitle={`Compreensão auditiva treinada com liberdade total 🇺🇸 US & 🇬🇧 UK.`}
         correctCount={correctCount}
         totalItems={questions.length}
         mistakesCount={mistakesCount}
@@ -271,52 +288,67 @@ export const NativeEarGame = memo(function NativeEarGame({
 
   if (!currentQuestion) return null;
 
-  const replayState = getButtonState({
+  const usBtnState = getButtonState({
     text: currentQuestion.spokenText,
-    accent: currentQuestion.accent,
-    sourceId: `native-ear-replay-${currentQuestion.questionId}`,
+    accent: 'us',
+    sourceId: `native-ear-us-${currentQuestion.questionId}`,
+  });
+
+  const ukBtnState = getButtonState({
+    text: currentQuestion.spokenText,
+    accent: 'uk',
+    sourceId: `native-ear-uk-${currentQuestion.questionId}`,
   });
 
   const chosenOption = currentQuestion.options.find((o) => o.id === selectedOptionId);
   const wasRight = Boolean(chosenOption?.isCorrect);
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 ewm-pillar-enter select-none">
+    <div
+      data-round-id={currentQuestion.questionId}
+      className="max-w-2xl mx-auto space-y-4 ewm-pillar-enter select-none"
+    >
       <MiniGameTopHud
         title="Ouvido de Nativo · US & UK"
-        subtitle="Compreensão auditiva pura: ouça sem ler e identifique o sentido natural"
+        subtitle="Compreensão auditiva pura: ouça em US ou UK quantas vezes quiser antes de responder"
         progressLabel={`${qIdx + 1} / ${questions.length}`}
         floatingXp={floatingXp}
         dailyCapReached={dailyCapReached}
         onBackToArena={onBackToArena}
         rightBadge={
           <span
+            title={isAudioLoading ? 'Cronômetro pausado enquanto a voz carrega' : undefined}
             className={`min-h-[36px] inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border font-mono-num text-xs font-bold ${
-              secondsLeft <= 4 && !isAnswered
+              isAudioLoading
+                ? 'border-[#38E5A5]/45 bg-[#ECFDF5] dark:bg-[#132920] text-[#059669] dark:text-[#38E5A5]'
+                : secondsLeft <= 4 && !isAnswered
                 ? 'border-[#DC2626]/50 bg-[#FEF2F2] dark:bg-[#311C1C] text-[#B91C1C] dark:text-[#FCA5A5]'
-                : 'border-[#C6DBD7] dark:border-[#2F4B46] bg-[#F2F8F6] dark:bg-[#1B2A26] text-[#225851] dark:text-[#86CEC2]'
+                : 'border-[#B8E6D4] dark:border-[#38E5A5]/25 bg-[#F2FBF7] dark:bg-[#13231E] text-[#0F6E52] dark:text-[#6EE7B7]'
             }`}
           >
             <Clock className="w-3.5 h-3.5" />
-            <span>{secondsLeft}s</span>
+            <span>{isAudioLoading ? `${secondsLeft}s ⏸` : `${secondsLeft}s`}</span>
           </span>
         }
       />
 
-      {/* Accent Selector Pills */}
+      {/* Auto-Play Accent Preference Pills (Never resets or swaps the active card!) */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="inline-flex items-center gap-1 p-1 rounded-2xl border border-[#E4E0D8] dark:border-[#2C332E] bg-white dark:bg-[#1F2420]">
+        <div className="inline-flex items-center gap-1 p-1 rounded-2xl border border-[#D8E8E2] dark:border-[#38E5A5]/20 bg-white dark:bg-[#131A22]">
           {ACCENT_MODES.map((m) => {
             const active = accentMode === m.key;
             return (
               <button
                 key={m.key}
                 type="button"
-                onClick={() => handleSelectAccentMode(m.key)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelectAccentMode(m.key);
+                }}
                 className={`min-h-[34px] px-3 py-1 rounded-xl text-xs font-semibold cursor-pointer ${
                   active
-                    ? 'bg-[#28665E] text-white shadow-2xs'
-                    : 'text-[#5C574E] dark:text-[#B5C0B9] hover:text-[#1C1B18] dark:hover:text-white'
+                    ? 'bg-[#00C982] dark:bg-[#38E5A5] text-[#06281D] font-bold shadow-2xs'
+                    : 'text-[#525E5A] dark:text-[#B5C4BE] hover:text-[#121816] dark:hover:text-white'
                 }`}
               >
                 {m.label}
@@ -325,75 +357,87 @@ export const NativeEarGame = memo(function NativeEarGame({
           })}
         </div>
 
-        <span className="text-xs font-mono-num text-[#6B655C] dark:text-[#9CA49E]">
-          Acertos: <strong>{correctCount}</strong>
+        <span className="text-xs font-mono-num text-[#525E5A] dark:text-[#9CB0A9]">
+          Acertos: <strong className="text-[#059669] dark:text-[#38E5A5]">{correctCount}</strong>
         </span>
       </div>
 
       {/* Main Listening Card */}
       <div
         key={`ear-card-${shakeKey}`}
-        className={`rounded-3xl border border-[#DFDAD0] dark:border-[#313831] bg-white dark:bg-[#202420] p-4 sm:p-6 shadow-xs space-y-5 ${
+        className={`rounded-3xl border border-[#D4E7DF] dark:border-[#38E5A5]/22 bg-white dark:bg-[#131A22] p-4 sm:p-6 shadow-xs space-y-5 ${
           shakeKey > 0 && isAnswered && !wasRight ? 'ewm-micro-shake' : ''
         }`}
       >
-        {/* Big Pure-Listening Audio Trigger */}
-        <div className="rounded-2xl border border-[#C6DBD7] dark:border-[#2B433D] bg-gradient-to-br from-[#F3FAF8] to-[#E8F3F0] dark:from-[#192824] dark:to-[#15221E] p-4 sm:p-5 flex flex-col items-center text-center space-y-3">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/80 dark:bg-[#22332E] text-[11px] font-bold text-[#225851] dark:text-[#86CEC2]">
+        {/* Dual Independent US & UK Pure-Listening Controls */}
+        <div className="rounded-2xl border border-[#BCE8D6] dark:border-[#38E5A5]/25 bg-gradient-to-br from-[#F1FBF7] to-[#E6F7F0] dark:from-[#142520] dark:to-[#0F1B18] p-4 sm:p-5 flex flex-col items-center text-center space-y-3.5">
+          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-white/90 dark:bg-[#192F29] border border-[#00C982]/25 dark:border-[#38E5A5]/25 text-[11px] font-bold text-[#0D6B4F] dark:text-[#38E5A5]">
             <Ear className="w-3.5 h-3.5" />
-            <span>
-              Sotaque desta rodada:{' '}
-              {currentQuestion.accent === 'uk' ? '🇬🇧 Britânico (UK)' : '🇺🇸 Americano (US)'}
-            </span>
+            <span>Compare livremente os dois sotaques nesta carta</span>
           </div>
 
-          <button
-            type="button"
-            aria-pressed={replayState !== 'idle'}
-            aria-busy={replayState === 'loading'}
-            onClick={() => {
-              void triggerTap();
-              void toggleSpeakEnglishText(
-                currentQuestion.spokenText,
-                currentQuestion.accent,
-                {
-                  role: 'term',
-                  sourceId: `native-ear-replay-${currentQuestion.questionId}`,
-                }
-              );
-            }}
-            className={`min-h-[52px] inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-2xl text-sm font-bold shadow-xs cursor-pointer ${
-              replayState === 'loading'
-                ? 'ewm-audio-loading bg-[#28665E] text-white'
-                : replayState === 'playing'
-                ? 'ewm-audio-playing bg-[#1F524B] text-white'
-                : 'bg-[#28665E] hover:bg-[#1F524B] text-white'
-            }`}
-          >
-            <AudioStatusIcon
-              state={replayState}
-              idleClassName="w-5 h-5"
-              activeClassName="w-5 h-4"
-            />
-            <span>
-              {replayState === 'loading'
-                ? 'Carregando voz neural...'
-                : replayState === 'playing'
-                ? 'Ouvindo expressão...'
-                : '🔊 Repetir Áudio'}
-            </span>
-          </button>
+          <div className="w-full max-w-md grid grid-cols-2 gap-2.5 sm:gap-3">
+            <button
+              type="button"
+              data-testid="native-ear-btn-us"
+              aria-pressed={usBtnState !== 'idle'}
+              aria-busy={usBtnState === 'loading'}
+              onClick={(e) => {
+                e.stopPropagation();
+                handlePlayAccent('us');
+              }}
+              className={`min-h-[50px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold border shadow-2xs cursor-pointer transition-all ${
+                usBtnState === 'loading'
+                  ? 'ewm-audio-loading border-[#00C982] dark:border-[#38E5A5] bg-[#00C982] dark:bg-[#38E5A5] text-[#05291D]'
+                  : usBtnState === 'playing'
+                  ? 'ewm-audio-playing border-[#00C982] dark:border-[#38E5A5] bg-[#059669] dark:bg-[#10B981] text-white shadow-[0_0_16px_rgba(56,229,165,0.4)]'
+                  : 'border-[#00C982]/40 dark:border-[#38E5A5]/35 bg-white hover:bg-[#ECFDF5] dark:bg-[#182924] dark:hover:bg-[#1E352E] text-[#0F3D30] dark:text-[#ECFDF5]'
+              }`}
+            >
+              <AudioStatusIcon
+                state={usBtnState}
+                idleClassName="w-4 h-4 text-[#059669] dark:text-[#38E5A5]"
+                activeClassName="w-4 h-4"
+              />
+              <span>🇺🇸 Ouvir US</span>
+            </button>
+
+            <button
+              type="button"
+              data-testid="native-ear-btn-uk"
+              aria-pressed={ukBtnState !== 'idle'}
+              aria-busy={ukBtnState === 'loading'}
+              onClick={(e) => {
+                e.stopPropagation();
+                handlePlayAccent('uk');
+              }}
+              className={`min-h-[50px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold border shadow-2xs cursor-pointer transition-all ${
+                ukBtnState === 'loading'
+                  ? 'ewm-audio-loading border-[#38BDF8] bg-[#0284C7] text-white'
+                  : ukBtnState === 'playing'
+                  ? 'ewm-audio-playing border-[#38BDF8] bg-[#0284C7] text-white shadow-[0_0_16px_rgba(56,189,248,0.38)]'
+                  : 'border-[#38BDF8]/40 dark:border-[#38BDF8]/35 bg-white hover:bg-[#F0F9FF] dark:bg-[#16242E] dark:hover:bg-[#1C2F3C] text-[#0C4A6E] dark:text-[#E0F2FE]'
+              }`}
+            >
+              <AudioStatusIcon
+                state={ukBtnState}
+                idleClassName="w-4 h-4 text-[#0284C7] dark:text-[#38BDF8]"
+                activeClassName="w-4 h-4"
+              />
+              <span>🇬🇧 Ouvir UK</span>
+            </button>
+          </div>
 
           {!isAnswered ? (
-            <p className="text-xs text-[#524E46] dark:text-[#AFC0B8]">
-              Grafia oculta até sua resposta para treinar escuta real
+            <p className="text-xs text-[#475550] dark:text-[#A7BDB5]">
+              Grafia oculta até sua resposta · clique em US ou UK quantas vezes precisar
             </p>
           ) : (
             <div className="pt-1 space-y-0.5 ewm-pillar-enter">
-              <p className="font-display text-lg sm:text-xl font-bold text-[#1C1B18] dark:text-[#F4F7F6]">
+              <p className="font-display text-lg sm:text-xl font-bold text-[#121816] dark:text-[#F4F9F7]">
                 {currentQuestion.card.primaryTerm}
               </p>
-              <p className="text-xs font-mono-num text-[#225851] dark:text-[#86CEC2]">
+              <p className="text-xs font-mono-num text-[#0D6B4F] dark:text-[#38E5A5]">
                 US {currentQuestion.card.phoneticUs} · UK {currentQuestion.card.phoneticUk}
               </p>
             </div>
@@ -404,17 +448,17 @@ export const NativeEarGame = memo(function NativeEarGame({
         <div className="space-y-2">
           {currentQuestion.options.map((opt, idx) => {
             let cls =
-              'border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#282D28] text-[#1C1B18] dark:text-[#EBE7DE] hover:border-[#28665E]/55';
+              'border-[#DDE8E3] dark:border-[#263340] bg-[#F8FBFA] dark:bg-[#19222C] text-[#121816] dark:text-[#EEF4F2] hover:border-[#00C982] dark:hover:border-[#38E5A5]/60';
             if (isAnswered) {
               if (opt.isCorrect) {
                 cls =
-                  'border-[#38E5A5] bg-[#ECFDF5] dark:bg-[#183127] text-[#0F5132] dark:text-[#C5ECDA]';
+                  'border-[#00C982] dark:border-[#38E5A5] bg-[#ECFDF5] dark:bg-[#132E24] text-[#064E3B] dark:text-[#D1FAE5] shadow-[0_0_14px_rgba(56,229,165,0.2)]';
               } else if (opt.id === selectedOptionId) {
                 cls =
-                  'border-[#B5443C] bg-[#FDF2F2] dark:bg-[#311F1E] text-[#8F312B] dark:text-[#F4BCB8]';
+                  'border-[#E11D48]/70 bg-[#FFF1F2] dark:bg-[#311820] text-[#9F1239] dark:text-[#FECDD3]';
               } else {
                 cls =
-                  'border-[#ECE9E1] dark:border-[#2A2F2A] bg-[#FAF9F6]/60 dark:bg-[#212421] text-[#857F74] dark:text-[#7D786F] opacity-65';
+                  'border-[#E8EEEB] dark:border-[#1E2832] bg-[#F8FBFA]/60 dark:bg-[#151D26] text-[#83918C] dark:text-[#6B7A88] opacity-65';
               }
             }
 
@@ -434,10 +478,10 @@ export const NativeEarGame = memo(function NativeEarGame({
                 </div>
 
                 {isAnswered && opt.isCorrect && (
-                  <CheckCircle2 className="w-4.5 h-4.5 text-[#10B981] shrink-0" />
+                  <CheckCircle2 className="w-4.5 h-4.5 text-[#10B981] dark:text-[#38E5A5] shrink-0" />
                 )}
                 {isAnswered && opt.id === selectedOptionId && !opt.isCorrect && (
-                  <XCircle className="w-4.5 h-4.5 text-[#B5443C] shrink-0" />
+                  <XCircle className="w-4.5 h-4.5 text-[#E11D48] shrink-0" />
                 )}
               </button>
             );
@@ -446,21 +490,21 @@ export const NativeEarGame = memo(function NativeEarGame({
 
         {/* Educational Reveal Footer */}
         {isAnswered && (
-          <div className="rounded-2xl border border-[#E4E0D8] dark:border-[#303831] bg-[#FAF9F6] dark:bg-[#1B201C] p-3.5 flex flex-wrap items-center justify-between gap-3 ewm-pillar-enter">
+          <div className="rounded-2xl border border-[#D4E7DF] dark:border-[#38E5A5]/22 bg-[#F4FBF8] dark:bg-[#101820] p-3.5 flex flex-wrap items-center justify-between gap-3 ewm-pillar-enter">
             <div className="space-y-0.5 text-xs">
-              <p className="font-bold text-[#1C1B18] dark:text-[#F4F7F6]">
+              <p className="font-bold text-[#121816] dark:text-[#F4F9F7]">
                 {timedOut
                   ? '⏱️ Tempo esgotado!'
                   : wasRight
                   ? '✅ Escuta certeira!'
                   : '💡 Confira a grafia e o sentido:'}{' '}
-                <span className="text-[#28665E] dark:text-[#38E5A5]">
+                <span className="text-[#059669] dark:text-[#38E5A5]">
                   {currentQuestion.card.primaryTerm}
                 </span>{' '}
                 → {currentQuestion.card.primaryPt}
               </p>
               {currentQuestion.card.cleanExampleEn && (
-                <p className="text-[#6B655C] dark:text-[#A0A8A2] italic">
+                <p className="text-[#525E5A] dark:text-[#9CB0A9] italic">
                   &ldquo;{currentQuestion.card.cleanExampleEn}&rdquo;
                 </p>
               )}
@@ -469,7 +513,7 @@ export const NativeEarGame = memo(function NativeEarGame({
             <button
               type="button"
               onClick={handleNextQuestion}
-              className="min-h-[42px] inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#28665E] hover:bg-[#1F524B] text-white text-xs sm:text-sm font-semibold cursor-pointer ml-auto"
+              className="min-h-[42px] inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#00C982] hover:bg-[#05B374] dark:bg-[#38E5A5] dark:hover:bg-[#2AD394] text-[#05291D] text-xs sm:text-sm font-bold cursor-pointer ml-auto shadow-[0_0_14px_rgba(56,229,165,0.28)]"
             >
               <span>
                 {qIdx + 1 >= questions.length ? 'Ver Resultado' : 'Próximo Áudio'}

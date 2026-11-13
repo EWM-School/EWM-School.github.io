@@ -85,7 +85,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
   return (
     <aside
       aria-label="Navegação principal desktop"
-      className="hidden md:flex md:w-[244px] lg:w-[268px] shrink-0 sticky top-0 h-dvh flex-col justify-between border-r border-[#DFDBD1] dark:border-[#262C27] bg-[#F0EDE6]/90 dark:bg-[#141714]/95 backdrop-blur-md z-30 select-none"
+      className="hidden md:flex md:w-[244px] lg:w-[268px] shrink-0 sticky top-0 h-dvh flex-col justify-between border-r border-[#10D990]/24 dark:border-[#38E5A5]/18 bg-[#EDF7F3]/92 dark:bg-[#0B1016]/95 backdrop-blur-xl z-30 select-none"
     >
       {/* Top Section: Brand Lockup + 3 Pillars Navigation */}
       <div className="p-4 lg:p-5 space-y-6">
@@ -98,17 +98,21 @@ export const DesktopSidebar = memo(function DesktopSidebar({
           }}
           title="Voltar para a Capa Inicial & Área do Aluno"
           aria-label="Voltar para a capa inicial"
-          className="w-full flex items-center gap-3 p-2 -m-2 rounded-2xl text-left group cursor-pointer hover:bg-white/60 dark:hover:bg-[#1D221E] focus-visible:outline-2 focus-visible:outline-[#28665E]"
+          className="w-full flex items-center gap-3 p-2 -m-2 rounded-2xl text-left group cursor-pointer hover:bg-white/75 dark:hover:bg-[#131B24] focus-visible:outline-2 focus-visible:outline-[#00C982]"
         >
           <img
             src={`${import.meta.env.BASE_URL}ewm-logo.jpg`}
             alt="EWM - Keep practicing"
             referrerPolicy="no-referrer"
-            className="w-10 h-10 rounded-xl object-cover border border-[#E4E0D8] dark:border-[#2E332E] bg-white shrink-0 shadow-2xs group-hover:border-[#28665E] dark:group-hover:border-[#38E5A5]/60 transition-colors"
+            className="w-10 h-10 rounded-xl object-cover border border-[#10D990]/35 dark:border-[#38E5A5]/30 bg-white shrink-0 shadow-2xs group-hover:border-[#00C982] dark:group-hover:border-[#38E5A5] transition-colors"
           />
           <div className="min-w-0 flex-1">
-            <span className="block font-display text-sm lg:text-[15px] font-bold tracking-tight text-[#1C1B18] dark:text-[#EBE7DE] group-hover:text-[#28665E] dark:group-hover:text-[#68B4A8] truncate">
-              EWM · Keep practicing
+            <span className="block font-display text-sm lg:text-[15px] font-extrabold tracking-tight truncate">
+              <span className="ewm-neon-logo">EWM</span>
+              <span className="text-[#121816] dark:text-[#E2E8F0] font-semibold">
+                {' '}
+                · Keep practicing
+              </span>
             </span>
 
             <span
@@ -155,9 +159,9 @@ export const DesktopSidebar = memo(function DesktopSidebar({
               style={{
                 transform: `translate3d(0, ${activeIndex * 62}px, 0)`,
               }}
-              className="ewm-nav-slider pointer-events-none absolute top-0 inset-x-0 h-[56px] rounded-2xl bg-white dark:bg-[#1F2622] border border-[#C6DBD7] dark:border-[#38E5A5]/30 shadow-xs"
+              className="ewm-nav-slider pointer-events-none absolute top-0 inset-x-0 h-[56px] rounded-2xl bg-white dark:bg-[#141E28] border border-[#00C982]/40 dark:border-[#38E5A5]/32 shadow-[0_4px_18px_rgba(16,217,144,0.2)] dark:shadow-[0_0_18px_rgba(56,229,165,0.16)]"
             >
-              <span className="absolute left-0 top-3 bottom-3 w-[3.5px] rounded-r-full bg-[#28665E] dark:bg-[#38E5A5] shadow-[0_0_10px_rgba(56,229,165,0.55)]" />
+              <span className="absolute left-0 top-3 bottom-3 w-[3.5px] rounded-r-full bg-[#00C982] dark:bg-[#38E5A5] shadow-[0_0_12px_rgba(56,229,165,0.75)]" />
             </div>
 
             {pillars.map((pillar) => {
@@ -171,15 +175,15 @@ export const DesktopSidebar = memo(function DesktopSidebar({
                   aria-current={isActive ? 'page' : undefined}
                   className={`relative z-10 h-[56px] w-full flex items-center gap-3 px-3.5 rounded-2xl text-left cursor-pointer ${
                     isActive
-                      ? 'text-[#1C1B18] dark:text-[#F4F7F6]'
-                      : 'text-[#5C574E] dark:text-[#A6ABA6] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE]'
+                      ? 'text-[#121816] dark:text-[#F4F9F7]'
+                      : 'text-[#475550] dark:text-[#9CB0A9] hover:text-[#121816] dark:hover:text-[#F1F5F9]'
                   }`}
                 >
                   <div
                     className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
                       isActive
-                        ? 'bg-[#EAF3F1] dark:bg-[#38E5A5]/15 text-[#28665E] dark:text-[#38E5A5]'
-                        : 'bg-[#E5E1D8]/70 dark:bg-[#1D211E] text-[#6B655C] dark:text-[#9AA09A]'
+                        ? 'bg-[#ECFDF5] dark:bg-[#38E5A5]/18 text-[#00C982] dark:text-[#38E5A5] shadow-[0_0_12px_rgba(56,229,165,0.22)]'
+                        : 'bg-[#E2EFEA]/80 dark:bg-[#151E27] text-[#52605B] dark:text-[#8CA29A]'
                     }`}
                   >
                     <Icon className="w-4 h-4" />

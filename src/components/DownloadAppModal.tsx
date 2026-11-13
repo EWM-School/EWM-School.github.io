@@ -29,7 +29,7 @@ interface DownloadAppModalProps {
   onNotify?: (message: string) => void;
 }
 
-type QrTargetMode = 'smart_page' | 'direct_apk';
+type QrTargetMode = 'dev_tunnel' | 'smart_page' | 'direct_apk';
 
 export function DownloadAppModal({
   isOpen,
@@ -38,13 +38,45 @@ export function DownloadAppModal({
 }: DownloadAppModalProps) {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [qrMode, setQrMode] = useState<QrTargetMode>('smart_page');
+  const [devTunnelUrl, setDevTunnelUrl] = useState<string | null>(null);
   const [qrSvgDataUrl, setQrSvgDataUrl] = useState<string>('');
   const [copiedLink, setCopiedLink] = useState(false);
   const [installingPwa, setInstallingPwa] = useState(false);
 
   const mobileSmartUrl = useMemo(() => resolveDynamicMobileDownloadUrl(), []);
+
+  useEffect(() => {
+    if (!isOpen || typeof window === 'undefined') return;
+    const host = window.location.hostname.toLowerCase();
+    const isLocal =
+      host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+    if (!isLocal) return;
+
+    let cancelled = false;
+    fetch('/api/dev/tunnel')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { active?: boolean; tunnelUrl?: string | null } | null) => {
+        if (cancelled) return;
+        if (data?.active && data.tunnelUrl) {
+          setDevTunnelUrl(data.tunnelUrl);
+          setQrMode('dev_tunnel');
+        }
+      })
+      .catch(() => {
+        // Ignore when offline or production
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
+
   const activeQrUrl =
-    qrMode === 'direct_apk' ? OFFICIAL_ANDROID_APK_URL : mobileSmartUrl;
+    qrMode === 'dev_tunnel' && devTunnelUrl
+      ? devTunnelUrl
+      : qrMode === 'direct_apk'
+      ? OFFICIAL_ANDROID_APK_URL
+      : mobileSmartUrl;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -90,13 +122,19 @@ export function DownloadAppModal({
   }
 
   const handleCopyLink = async () => {
+    const linkToCopy =
+      qrMode === 'dev_tunnel' && devTunnelUrl ? devTunnelUrl : mobileSmartUrl;
     try {
-      await navigator.clipboard.writeText(mobileSmartUrl);
+      await navigator.clipboard.writeText(linkToCopy);
       setCopiedLink(true);
-      onNotify?.('Link oficial copiado para enviar ao celular!');
+      onNotify?.(
+        qrMode === 'dev_tunnel' && devTunnelUrl
+          ? 'Link HTTPS de Preview copiado para abrir no celular!'
+          : 'Link oficial copiado para enviar ao celular!'
+      );
       window.setTimeout(() => setCopiedLink(false), 2400);
     } catch {
-      onNotify?.(`Acesse no celular: ${OFFICIAL_CANONICAL_WEB_URL}`);
+      onNotify?.(`Acesse no celular: ${linkToCopy || OFFICIAL_CANONICAL_WEB_URL}`);
     }
   };
 
@@ -192,7 +230,24 @@ export function DownloadAppModal({
             </div>
 
             {/* QR Target Switcher */}
-            <div className="w-full grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#F3F0E8] dark:bg-[#222622] text-[11px] font-semibold">
+            <div
+              className={`w-full grid ${
+                devTunnelUrl ? 'grid-cols-3' : 'grid-cols-2'
+              } gap-1 p-1 rounded-xl bg-[#F3F0E8] dark:bg-[#222622] text-[11px] font-semibold`}
+            >
+              {devTunnelUrl && (
+                <button
+                  type="button"
+                  onClick={() => setQrMode('dev_tunnel')}
+                  className={`py-1.5 px-2 rounded-lg transition-colors cursor-pointer ${
+                    qrMode === 'dev_tunnel'
+                      ? 'bg-[#00A86E] dark:bg-[#38E5A5] text-white dark:text-[#071610] shadow-2xs'
+                      : 'text-[#6B655C] dark:text-[#9E998F] hover:text-[#1C1B18] dark:hover:text-[#EBE7DE]'
+                  }`}
+                >
+                  Preview HTTPS
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setQrMode('smart_page')}

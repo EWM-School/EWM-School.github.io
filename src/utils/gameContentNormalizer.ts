@@ -272,9 +272,26 @@ export function normalizeBuilderTokenText(token: string): string {
     .trim();
 }
 
+const GENDER_PAREN_SENTINEL_OPEN = '__GENDER_OPEN__';
+const GENDER_PAREN_SENTINEL_CLOSE = '__GENDER_CLOSE__';
+
+function protectWordSuffixParentheses(input: string): string {
+  return input.replace(
+    /([A-Za-zÀ-ÿ])\((a|o|as|os|s|es)\)/gi,
+    `$1${GENDER_PAREN_SENTINEL_OPEN}$2${GENDER_PAREN_SENTINEL_CLOSE}`
+  );
+}
+
+function restoreWordSuffixParentheses(input: string): string {
+  return input
+    .replace(new RegExp(GENDER_PAREN_SENTINEL_OPEN, 'g'), '(')
+    .replace(new RegExp(GENDER_PAREN_SENTINEL_CLOSE, 'g'), ')');
+}
+
 /**
  * Extracts parenthetical or bracketed editorial notes (e.g. `(informal)`, `[gíria]`)
- * while stripping phonetic tags `(Pronúncia: ...)` and `/.../` transcriptions.
+ * while stripping phonetic tags `(Pronúncia: ...)` and `/.../` transcriptions,
+ * and preserving morphological suffixes like `obrigado(a)` / `ocupado(a)`.
  */
 export function extractEditorialNotesAndClean(raw: string): {
   cleaned: string;
@@ -290,7 +307,10 @@ export function extractEditorialNotesAndClean(raw: string): {
   const { meaning } = extractPhoneticNotation(text);
   text = meaning;
 
-  // Strip slash-delimited IPA/phonetics `/rép ÂP/`
+  // Protect morphological suffixes like `obrigado(a)` before extracting editorial notes
+  text = protectWordSuffixParentheses(text);
+
+  // Strip slash-delimited IPA/phonetics `/rép ÂP/` (only when slash touches inner characters, never `" / "`)
   text = text.replace(
     /(^|[\s([{"“'—–·•])\/(?!\s)[^/\r\n]{1,64}(?<!\s)\/(?=$|[\s)\]}"”'.,!?;:—–·•])/gu,
     '$1 '
@@ -312,7 +332,7 @@ export function extractEditorialNotesAndClean(raw: string): {
     text = text.replace(/\[([^\]]*)\]/g, collectNote);
   }
 
-  text = text
+  text = restoreWordSuffixParentheses(text)
     .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, ' ')
     .replace(/\p{Extended_Pictographic}/gu, ' ')
     .replace(/[\uFE0E\uFE0F\u200D\u20E3]/gu, '')
@@ -324,8 +344,8 @@ export function extractEditorialNotesAndClean(raw: string): {
 }
 
 /**
- * Splits slash-separated English or Portuguese variants (`"hang up / end the call"`)
- * into clean standalone alternatives without breaking numeric ratios (`24/7`).
+ * Splits slash-separated English or Portuguese term/meaning variants (`"hang up / end the call"`)
+ * into clean standalone alternatives without breaking numeric ratios (`24/7`) or gender `o/a`.
  */
 export function splitSlashVariantsCleanly(cleanedText: string): string[] {
   const base = String(cleanedText || '').trim();
@@ -354,23 +374,98 @@ function cleanPtMeaningCandidate(raw: string): string {
   const variants = splitSlashVariantsCleanly(cleaned);
   const primary = (variants[0] || cleaned)
     .replace(/^→\s*/, '')
-    .replace(/[.!?]+$/, '')
+    .replace(/[.!?…]+$/, '')
     .trim();
   return primary;
 }
 
-function cleanSentenceForGame(raw: string, keepTerminalPunct = true): string {
-  const { cleaned } = extractEditorialNotesAndClean(raw);
-  const variants = splitSlashVariantsCleanly(cleaned);
-  let sentence = (variants[0] || cleaned)
+const EDITORIAL_REGISTER_TAG_RX =
+  /\((?:\s*(?:informal|formal|coloquial|g[ií]ria|slang|figurado|literal|us|uk|br|eua|muito comum|comum|very common)\s*)\)/gi;
+
+/**
+ * Cleans full contextual sentences (`exampleEn` / `examplePt`) WITHOUT splitting on `/`
+ * and WITHOUT stripping valid times (`6:30`), numbers, hyphens (`no-brainer`, `check-in`),
+ * slashes, or meaningful parenthetical complements in Portuguese!
+ */
+export function cleanSentenceForGame(
+  raw: string,
+  keepTerminalPunct = true,
+  lang: 'en' | 'pt' = 'en'
+): string {
+  let text = normalizeApostrophes(String(raw || '').trim());
+  if (!text) return '';
+
+  // Remove coupled arrow translation if accidentally present on an English string
+  if (lang === 'en') {
+    text = text.replace(/\s*(?:→|->|⇒)\s*.+$/u, '');
+  } else {
+    text = text.replace(/^→\s*/, '');
+  }
+
+  // Strip `(Pronúncia: ...)` phonetic helper tags
+  text = extractPhoneticNotation(text).meaning;
+
+  // Strip slash-delimited IPA/phonetics `/rép ÂP/` (never touches spaced `" / "` or `24/7`)
+  text = text.replace(
+    /(^|[\s([{"“'—–·•])\/(?!\s)(?![0-9]+\/[0-9]+)[^/\r\n]{1,48}(?<!\s)\/(?=$|[\s)\]}"”'.,!?;:—–·•])/gu,
+    '$1 '
+  );
+
+  // Strip pure editorial register tags like `(informal)` while preserving semantic complements in PT (`(7 PM)`, `obrigado(a)`, etc.)
+  text = text.replace(EDITORIAL_REGISTER_TAG_RX, ' ');
+  if (lang === 'en') {
+    text = protectWordSuffixParentheses(text);
+    text = text.replace(/\[([^\]]{1,36})\]/g, ' ');
+    text = restoreWordSuffixParentheses(text);
+  }
+
+  let sentence = text
+    .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, ' ')
+    .replace(/\p{Extended_Pictographic}/gu, ' ')
+    .replace(/[\uFE0E\uFE0F\u200D\u20E3]/gu, '')
+    .replace(/[“”"«»„]/g, '')
     .replace(/^\s*\d{1,2}\s*(?:·|\.\s+|\)\s+)\s*/u, '')
+    .replace(/\s+([,.;!?])/g, '$1')
     .replace(/\s+/g, ' ')
     .trim();
+
   if (!sentence) return '';
   if (!keepTerminalPunct) {
     sentence = sentence.replace(/[.!?]+$/, '').trim();
   }
   return sentence;
+}
+
+const LEGITIMATE_TRAILING_PARTICLE_IDIOMS_RX =
+  /\b(?:kind\s+of|sort\s+of|(?:would|'d|will|do|did|don't|didn't|want|wanted|love|like|have|had|used|going|supposed|happy|glad|ready|able)\s+to|where\s+(?:we're|we\s+are|you're|you\s+are|i'm|i\s+am|it's|they're)\s+at|(?:try|put|turn|hold|hang|come|go|carry|move|keep|check|log|sign|fill|fit|give|get|wake|stand|sit|grow|show|break|call|take|look|find|work|figure|watch|blow|cut|fall|play|wrap)(?:s|ed|ing)?(?:\s+(?:it|them|me|him|her|us|this|that))?\s+(?:on|in|up|off|out|down|away|back|over|through|around|along|ahead|by))\s*[.!?]*$/i;
+
+const DANGLING_DETERMINER_OR_PREP_ENDING_RX =
+  /\b(?:a|an|the|my|your|his|her|its|our|their|some|any|every|each|as|into|onto|upon|than|because|although|unless|while|during|between|among|without|towards?|regarding|of|for|with|from|about|to)\s*[.!?]*$/i;
+
+const OPEN_STEM_TEMPLATE_RX =
+  /\b(?:my\s+name\s+is|i\s+work\s+as(?:\s+a|\s+an)?|i(?:'m|\s+am)\s+looking\s+for|i\s+like\s+playing|he\s+works\s+as(?:\s+a|\s+an)?|she\s+works\s+as(?:\s+a|\s+an)?)\s*[.!?]*$/i;
+
+/**
+ * Hard linguistic safety guard: detects open-template ellipses (`...` / `…`) or sentences/terms
+ * truncated at a dangling article, determiner, preposition, or open copula/stem (`"I work as a."`).
+ */
+export function hasDanglingEndingOrEllipsis(text: string): boolean {
+  const raw = normalizeApostrophes(String(text || '').trim());
+  if (!raw) return true;
+  if (raw.includes('...') || raw.includes('…')) return true;
+
+  if (OPEN_STEM_TEMPLATE_RX.test(raw)) {
+    return true;
+  }
+
+  if (DANGLING_DETERMINER_OR_PREP_ENDING_RX.test(raw)) {
+    if (LEGITIMATE_TRAILING_PARTICLE_IDIOMS_RX.test(raw)) {
+      return false;
+    }
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -382,12 +477,12 @@ export function normalizeCardForMiniGame(card: Flashcard): NormalizedGameCard | 
 
   const termExtracted = extractEditorialNotesAndClean(card.term);
   const termVariants = splitSlashVariantsCleanly(termExtracted.cleaned);
-  const rawPrimaryTerm = (termVariants[0] || '').replace(/[.!?]+$/, '').trim();
+  const rawPrimaryTerm = (termVariants[0] || '').replace(/[.!?…]+$/, '').trim();
   if (!rawPrimaryTerm || !/[A-Za-z]/.test(rawPrimaryTerm)) return null;
 
   const altTerms = termVariants
     .slice(1)
-    .map((v) => v.replace(/[.!?]+$/, '').trim())
+    .map((v) => v.replace(/[.!?…]+$/, '').trim())
     .filter(Boolean);
 
   const literalExtracted = extractEditorialNotesAndClean(card.literal || '');
@@ -425,10 +520,10 @@ export function normalizeCardForMiniGame(card: Flashcard): NormalizedGameCard | 
   normPtSet.add(normalizedPrimaryPt);
 
   const sec = getCardSecondExample(card);
-  const cleanExampleEn = cleanSentenceForGame(card.exampleEn, true);
-  const cleanExamplePt = cleanSentenceForGame(card.examplePt, true);
-  const cleanExampleEn2 = cleanSentenceForGame(card.exampleEn2 || sec.en, true);
-  const cleanExamplePt2 = cleanSentenceForGame(card.examplePt2 || sec.pt, true);
+  const cleanExampleEn = cleanSentenceForGame(card.exampleEn, true, 'en');
+  const cleanExamplePt = cleanSentenceForGame(card.examplePt, true, 'pt');
+  const cleanExampleEn2 = cleanSentenceForGame(card.exampleEn2 || sec.en, true, 'en');
+  const cleanExamplePt2 = cleanSentenceForGame(card.examplePt2 || sec.pt, true, 'pt');
 
   const phonetics = getCardPhonetics(card);
   const validCategory = VALID_FOLDERS.includes(card.category) ? card.category : 'Frases';
@@ -598,13 +693,16 @@ export function tokenizeAndChunkForBuilder(rawEnglish: string): {
       ? (punctMatch[1] as '?' | '!')
       : '.';
 
-  // Separate em/en-dashes and slashes into clean word spaces and strip stray punctuation around words
+  // Separate em/en-dashes and non-numeric slashes into clean word spaces while preserving `24/7`, `6:30`, and `no-brainer`
+  const RATIO_SENTINEL = '__RATIO_SLASH__';
   const rawWords = trimmed
-    .replace(/[.!?]+$/, '')
+    .replace(/[.!?…]+$/, '')
+    .replace(/(\d)\/(\d)/g, `$1${RATIO_SENTINEL}$2`)
     .replace(/[—–/]+/g, ' ')
     .split(/\s+/)
     .map((w) =>
       w
+        .replace(new RegExp(RATIO_SENTINEL, 'g'), '/')
         .replace(/^[^A-Za-z0-9']+|[^A-Za-z0-9']+$/g, '')
         .trim()
     )
@@ -667,27 +765,115 @@ export function tokenizeAndChunkForBuilder(rawEnglish: string): {
   };
 }
 
+function repairDanglingTemplatePair(
+  rawEn: string,
+  rawPt: string
+): { en: string; pt: string } {
+  const enTrimmed = normalizeApostrophes(rawEn).replace(/[.!?…]+$/, '').trim();
+  const ptTrimmed = rawPt.replace(/[.!?…]+$/, '').trim();
+
+  if (/^i\s+work\s+as(?:\s+a|\s+an)?$/i.test(enTrimmed)) {
+    return {
+      en: 'I work as a project manager.',
+      pt: 'Eu trabalho como gerente de projetos.',
+    };
+  }
+  if (/^my\s+name\s+is$/i.test(enTrimmed)) {
+    return {
+      en: 'My name is Lucas.',
+      pt: 'Meu nome é Lucas.',
+    };
+  }
+  if (/^i(?:'m|\s+am)\s+looking\s+for$/i.test(enTrimmed)) {
+    return {
+      en: "I'm looking for a gift.",
+      pt: 'Estou procurando um presente.',
+    };
+  }
+  if (/^i\s+like\s+playing$/i.test(enTrimmed)) {
+    return {
+      en: 'I like playing soccer.',
+      pt: 'Eu gosto de jogar futebol.',
+    };
+  }
+
+  // Generic last-resort safety lock: strip any trailing dangling article/determiner/preposition so `"I work as a."` can never exist
+  let safeEn = enTrimmed;
+  for (let pass = 0; pass < 3; pass++) {
+    if (!hasDanglingEndingOrEllipsis(safeEn)) break;
+    const stripped = safeEn.replace(
+      /\s+\b(?:a|an|the|my|your|his|her|its|our|their|some|any|every|each|as|into|onto|upon|than|because|although|unless|while|during|between|among|without|towards?|regarding|of|for|with|from|about|to)\s*$/i,
+      ''
+    );
+    if (stripped === safeEn || !stripped.trim()) break;
+    safeEn = stripped.trim();
+  }
+
+  return {
+    en: `${safeEn || 'Keep practicing'}.`,
+    pt: `${ptTrimmed || 'Continue praticando'}.`,
+  };
+}
+
 export function buildExpressionBuilderRound(
   card: NormalizedGameCard,
   options?: { preferSentence?: boolean; rng?: () => number }
 ): ExpressionBuilderRound {
   const rng = options?.rng ?? Math.random;
   const termWordCount = card.primaryTerm.split(/\s+/).filter(Boolean).length;
+  const termIsIncompleteTemplate =
+    hasDanglingEndingOrEllipsis(card.originalCard.term) ||
+    hasDanglingEndingOrEllipsis(card.primaryTerm);
+
+  const hasValidEx1 = Boolean(
+    card.cleanExampleEn &&
+      card.cleanExamplePt &&
+      !hasDanglingEndingOrEllipsis(card.cleanExampleEn)
+  );
+  const hasValidEx2 = Boolean(
+    card.cleanExampleEn2 &&
+      card.cleanExamplePt2 &&
+      !hasDanglingEndingOrEllipsis(card.cleanExampleEn2)
+  );
 
   const useTermDirectly =
-    options?.preferSentence === false
+    !termIsIncompleteTemplate &&
+    (options?.preferSentence === false
       ? termWordCount >= 2
-      : !options?.preferSentence &&
-        termWordCount >= 3 &&
-        (!card.cleanExampleEn || rng() < 0.45);
+      : !hasValidEx1 && !hasValidEx2);
 
-  const rawSourceEn =
-    useTermDirectly || !card.cleanExampleEn ? card.primaryTerm : card.cleanExampleEn;
-  const promptPt =
-    useTermDirectly || !card.cleanExamplePt ? card.primaryPt : card.cleanExamplePt;
+  let rawSourceEn: string;
+  let promptPt: string;
 
-  const { blocks, cleanTargetSentence, terminalPunctuation } =
+  if (useTermDirectly) {
+    rawSourceEn = card.primaryTerm;
+    promptPt = card.primaryPt;
+  } else if (hasValidEx1) {
+    rawSourceEn = card.cleanExampleEn;
+    promptPt = card.cleanExamplePt;
+  } else if (hasValidEx2) {
+    rawSourceEn = card.cleanExampleEn2;
+    promptPt = card.cleanExamplePt2;
+  } else {
+    const repaired = repairDanglingTemplatePair(
+      card.cleanExampleEn || card.primaryTerm,
+      card.cleanExamplePt || card.primaryPt
+    );
+    rawSourceEn = repaired.en;
+    promptPt = repaired.pt;
+  }
+
+  let { blocks, cleanTargetSentence, terminalPunctuation } =
     tokenizeAndChunkForBuilder(rawSourceEn);
+
+  // Final mathematical invariant: NEVER allow a dangling article/preposition sentence into the builder!
+  if (hasDanglingEndingOrEllipsis(cleanTargetSentence)) {
+    const repaired = repairDanglingTemplatePair(cleanTargetSentence, promptPt);
+    promptPt = repaired.pt;
+    ({ blocks, cleanTargetSentence, terminalPunctuation } = tokenizeAndChunkForBuilder(
+      repaired.en
+    ));
+  }
 
   const expectedBlocks: BuilderBlockItem[] = blocks.map((text, index) => ({
     id: `blk_${card.id}_${index}`,
@@ -973,7 +1159,9 @@ export function buildSurvivalChallenge(
   const resolvedKind: SurvivalChallengeKind =
     desiredKind === 'cloze' && !maskedExample ? 'translation' : desiredKind;
 
-  const accent: EnglishAccent = stepIndex % 2 === 0 ? 'us' : 'uk';
+  // Alternate default initial accent evenly across listening cycles (0 -> US, 1 -> UK, 2 -> US...) instead of locking odd stepIndex onto UK
+  const accent: EnglishAccent =
+    Math.floor(stepIndex / cycleKinds.length) % 2 === 0 ? 'us' : 'uk';
 
   const candidates = shuffleDeterministicOrRandom(allReferenceCards, rng);
   const sameCatFirst = [

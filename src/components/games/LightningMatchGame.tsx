@@ -1,14 +1,17 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Sparkles, Timer, Volume2, VolumeX } from 'lucide-react';
+import { Music, Sparkles, Timer } from 'lucide-react';
+import {
+  isArcadeMusicEnabled,
+  playArcadeMatchChime,
+  setArcadeMusicEnabled,
+  startArcadeGroove,
+  stopArcadeGroove,
+} from '../../services/audio/arcadeGrooveEngine';
 import {
   triggerError,
   triggerSuccess,
   triggerTap,
 } from '../../services/platform/hapticsService';
-import {
-  speakEnglishText,
-  stopCurrentAudio,
-} from '../../services/platform/speechService';
 import {
   LIGHTNING_VISIBLE_SLOTS,
   buildLightningMatchDeck,
@@ -124,7 +127,9 @@ export const LightningMatchGame = memo(function LightningMatchGame({
   const [matchedCount, setMatchedCount] = useState(0);
   const [mistakesCount, setMistakesCount] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [speakOnMatch, setSpeakOnMatch] = useState(true);
+  const [musicEnabled, setMusicEnabled] = useState<boolean>(() =>
+    isArcadeMusicEnabled()
+  );
   const [isFinished, setIsFinished] = useState(false);
   const [finishedOutcome, setFinishedOutcome] =
     useState<MiniGameXpAwardOutcome | null>(null);
@@ -142,10 +147,22 @@ export const LightningMatchGame = memo(function LightningMatchGame({
     timersRef.current = [];
   }, []);
 
+  // Manage Web Audio procedural groove lifecycle strictly (zero spoken TTS voice!)
+  useEffect(() => {
+    if (!isFinished && musicEnabled) {
+      startArcadeGroove();
+    } else {
+      stopArcadeGroove();
+    }
+    return () => {
+      stopArcadeGroove();
+    };
+  }, [isFinished, musicEnabled]);
+
   useEffect(() => {
     return () => {
       clearPendingTimers();
-      stopCurrentAudio();
+      stopArcadeGroove();
     };
   }, [clearPendingTimers]);
 
@@ -158,11 +175,31 @@ export const LightningMatchGame = memo(function LightningMatchGame({
     return () => globalThis.clearInterval(interval);
   }, [isFinished]);
 
+  const handleToggleMusic = useCallback(() => {
+    void triggerTap();
+    setMusicEnabled((prev) => {
+      const next = !prev;
+      setArcadeMusicEnabled(next);
+      if (next) {
+        startArcadeGroove();
+      } else {
+        stopArcadeGroove();
+      }
+      return next;
+    });
+  }, []);
+
+  const handleExitToArena = useCallback(() => {
+    clearPendingTimers();
+    stopArcadeGroove();
+    onBackToArena();
+  }, [clearPendingTimers, onBackToArena]);
+
   const finalizeMatch = useCallback(
     (totalPairs: number, totalMistakes: number) => {
       if (finishedLockRef.current) return;
       finishedLockRef.current = true;
-      stopCurrentAudio();
+      stopArcadeGroove();
       const outcome = onCompleteMatch({
         gameId: 'lightning-match',
         correctCount: totalPairs,
@@ -192,16 +229,12 @@ export const LightningMatchGame = memo(function LightningMatchGame({
       }
 
       if (leftEntry.pairId === rightEntry.pairId) {
-        // MATCH! Apply 180ms smooth green (#38E5A5) dissolve with zero layout shift
+        // MATCH! Zero spoken TTS voice — play subtle crystalline micro-chord chime if music ON
         setSelectedLeftSlot(null);
         setSelectedRightSlot(null);
         void triggerSuccess();
-
-        if (speakOnMatch) {
-          void speakEnglishText(leftEntry.text, 'us', {
-            role: 'term',
-            sourceId: `lightning-${leftEntry.pairId}`,
-          });
+        if (musicEnabled) {
+          playArcadeMatchChime();
         }
 
         setBoard((prev) => {
@@ -239,7 +272,6 @@ export const LightningMatchGame = memo(function LightningMatchGame({
               .filter((idx) => idx >= 0);
 
             const remainingInQueue = prev.deck.length - prev.nextQueueIdx;
-            // Refill in batches of >= 2 empty slots (or when <= 1 item remains in queue) so new pairs are cross-shuffled!
             if (
               remainingInQueue > 0 &&
               (emptyLeftIndices.length >= 2 || remainingInQueue === 1)
@@ -318,7 +350,7 @@ export const LightningMatchGame = memo(function LightningMatchGame({
         timersRef.current.push(clearMismatchTimer);
       }
     },
-    [board, finalizeMatch, mistakesCount, speakOnMatch]
+    [board, finalizeMatch, mistakesCount, musicEnabled]
   );
 
   const handleTapLeft = useCallback(
@@ -327,6 +359,9 @@ export const LightningMatchGame = memo(function LightningMatchGame({
       const entry = board.leftSlots[slotIdx];
       if (!entry || entry.state !== 'idle') return;
       void triggerTap();
+      if (musicEnabled) {
+        startArcadeGroove();
+      }
 
       if (selectedLeftSlot === slotIdx) {
         setSelectedLeftSlot(null);
@@ -338,7 +373,7 @@ export const LightningMatchGame = memo(function LightningMatchGame({
         evaluatePairSelection(slotIdx, selectedRightSlot);
       }
     },
-    [board.leftSlots, evaluatePairSelection, mismatchSlots, selectedLeftSlot, selectedRightSlot]
+    [board.leftSlots, evaluatePairSelection, mismatchSlots, musicEnabled, selectedLeftSlot, selectedRightSlot]
   );
 
   const handleTapRight = useCallback(
@@ -347,6 +382,9 @@ export const LightningMatchGame = memo(function LightningMatchGame({
       const entry = board.rightSlots[slotIdx];
       if (!entry || entry.state !== 'idle') return;
       void triggerTap();
+      if (musicEnabled) {
+        startArcadeGroove();
+      }
 
       if (selectedRightSlot === slotIdx) {
         setSelectedRightSlot(null);
@@ -358,12 +396,11 @@ export const LightningMatchGame = memo(function LightningMatchGame({
         evaluatePairSelection(selectedLeftSlot, slotIdx);
       }
     },
-    [board.rightSlots, evaluatePairSelection, mismatchSlots, selectedLeftSlot, selectedRightSlot]
+    [board.rightSlots, evaluatePairSelection, mismatchSlots, musicEnabled, selectedLeftSlot, selectedRightSlot]
   );
 
   const handlePlayAgain = useCallback(() => {
     clearPendingTimers();
-    stopCurrentAudio();
     finishedLockRef.current = false;
     setBoard(createInitialLightningBoard(pool, allReferenceCards));
     setSelectedLeftSlot(null);
@@ -374,7 +411,10 @@ export const LightningMatchGame = memo(function LightningMatchGame({
     setElapsedSeconds(0);
     setFinishedOutcome(null);
     setIsFinished(false);
-  }, [allReferenceCards, clearPendingTimers, pool]);
+    if (musicEnabled) {
+      startArcadeGroove();
+    }
+  }, [allReferenceCards, clearPendingTimers, musicEnabled, pool]);
 
   if (isFinished) {
     return (
@@ -386,7 +426,7 @@ export const LightningMatchGame = memo(function LightningMatchGame({
         mistakesCount={mistakesCount}
         outcome={finishedOutcome}
         onPlayAgain={handlePlayAgain}
-        onBackToArena={onBackToArena}
+        onBackToArena={handleExitToArena}
         onOpenRankingModal={onOpenRankingModal}
       />
     );
@@ -400,33 +440,33 @@ export const LightningMatchGame = memo(function LightningMatchGame({
     <div className="max-w-2xl mx-auto space-y-4 ewm-pillar-enter select-none">
       <MiniGameTopHud
         title="Memória Relâmpago"
-        subtitle="Conecte a expressão em inglês ao equivalente natural usado no Brasil"
+        subtitle="Conecte rápido sem interrupções de voz — foco visual e agilidade"
         progressLabel={`${matchedCount} / ${totalPairs} pares`}
         floatingXp={floatingXp}
         dailyCapReached={dailyCapReached}
-        onBackToArena={onBackToArena}
+        onBackToArena={handleExitToArena}
         rightBadge={
           <div className="inline-flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => {
-                void triggerTap();
-                stopCurrentAudio();
-                setSpeakOnMatch((v) => !v);
+              data-testid="lightning-music-toggle"
+              aria-pressed={musicEnabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleMusic();
               }}
-              aria-label={speakOnMatch ? 'Silenciar voz ao acertar par' : 'Ativar voz ao acertar par'}
-              title={speakOnMatch ? 'Voz ao acertar ativa' : 'Voz silenciada'}
-              className="min-h-[36px] min-w-[36px] inline-flex items-center justify-center rounded-xl border border-[#DFDAD0] dark:border-[#2E332E] bg-white dark:bg-[#212421] text-[#28665E] dark:text-[#86CEC2] cursor-pointer"
+              className={`min-h-[36px] inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-bold cursor-pointer transition-all ${
+                musicEnabled
+                  ? 'border-[#00C982] dark:border-[#38E5A5]/60 bg-[#ECFDF5] dark:bg-[#132C23] text-[#047857] dark:text-[#38E5A5] shadow-[0_0_12px_rgba(56,229,165,0.22)]'
+                  : 'border-[#DCE5E1] dark:border-[#28333E] bg-white dark:bg-[#161E27] text-[#64748B] dark:text-[#94A3B8]'
+              }`}
             >
-              {speakOnMatch ? (
-                <Volume2 className="w-4 h-4" />
-              ) : (
-                <VolumeX className="w-4 h-4 opacity-60" />
-              )}
+              <Music className="w-3.5 h-3.5 shrink-0" />
+              <span>🎵 Música: {musicEnabled ? 'ON' : 'OFF'}</span>
             </button>
 
-            <span className="min-h-[36px] inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border border-[#DFDAD0] dark:border-[#2E332E] bg-white dark:bg-[#212421] font-mono-num text-xs font-semibold text-[#5C574E] dark:text-[#B9B4AA]">
-              <Timer className="w-3.5 h-3.5" />
+            <span className="min-h-[36px] inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-[#DCE5E1] dark:border-[#28333E] bg-white dark:bg-[#161E27] font-mono-num text-xs font-semibold text-[#475569] dark:text-[#CBD5E1]">
+              <Timer className="w-3.5 h-3.5 text-[#00C982] dark:text-[#38E5A5]" />
               <span>
                 {mins}:{secs}
               </span>
@@ -435,10 +475,10 @@ export const LightningMatchGame = memo(function LightningMatchGame({
         }
       />
 
-      {/* Smooth Progress Bar */}
-      <div className="h-2 rounded-full bg-[#E6E2D8] dark:bg-[#282E29] overflow-hidden">
+      {/* Neon Progress Bar */}
+      <div className="h-2 rounded-full bg-[#E2ECE8] dark:bg-[#1B2530] overflow-hidden">
         <div
-          className="h-full rounded-full bg-[#38E5A5] transition-all duration-200"
+          className="h-full rounded-full bg-[#00C982] dark:bg-[#38E5A5] ewm-neon-progress transition-all duration-200"
           style={{
             width: `${totalPairs > 0 ? Math.round((matchedCount / totalPairs) * 100) : 0}%`,
           }}
@@ -446,8 +486,8 @@ export const LightningMatchGame = memo(function LightningMatchGame({
       </div>
 
       {/* 2-Column Paired Grid (5 Fixed-Height Slots per Column => CLS Zero, Fits 360px Mobile) */}
-      <div className="rounded-3xl border border-[#DFDAD0] dark:border-[#313831] bg-white dark:bg-[#202420] p-3 sm:p-5 shadow-xs space-y-3">
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 px-1 text-[11px] font-bold uppercase tracking-wider text-[#6B655C] dark:text-[#9FA7A1]">
+      <div className="rounded-3xl border border-[#D4E7DF] dark:border-[#38E5A5]/22 bg-white dark:bg-[#131A22] p-3 sm:p-5 shadow-xs space-y-3">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 px-1 text-[11px] font-bold uppercase tracking-wider text-[#52605B] dark:text-[#94A9A1]">
           <span>🇺🇸 Inglês Natural</span>
           <span>🇧🇷 Português do Dia a Dia</span>
         </div>
@@ -461,9 +501,9 @@ export const LightningMatchGame = memo(function LightningMatchGame({
                   <div
                     key={`left-empty-${idx}`}
                     aria-hidden="true"
-                    className="h-[66px] sm:h-[68px] rounded-2xl border border-dashed border-[#ECE8DF] dark:border-[#292F2A] bg-[#FAF9F6]/40 dark:bg-[#1B1F1C]/40 flex items-center justify-center"
+                    className="h-[66px] sm:h-[68px] rounded-2xl border border-dashed border-[#DFECE6] dark:border-[#22303D] bg-[#F6FBF9]/50 dark:bg-[#0F151C]/50 flex items-center justify-center"
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-[#38E5A5]/45" />
+                    <Sparkles className="w-3.5 h-3.5 text-[#00C982]/45 dark:text-[#38E5A5]/45" />
                   </div>
                 );
               }
@@ -478,14 +518,14 @@ export const LightningMatchGame = memo(function LightningMatchGame({
                   type="button"
                   disabled={isDissolving}
                   onClick={() => handleTapLeft(idx)}
-                  className={`w-full h-[66px] sm:h-[68px] px-2.5 sm:px-3.5 py-2 rounded-2xl border text-left flex flex-col justify-center cursor-pointer overflow-hidden ${
+                  className={`w-full h-[66px] sm:h-[68px] px-2.5 sm:px-3.5 py-2 rounded-2xl border text-left flex flex-col justify-center cursor-pointer overflow-hidden transition-colors ${
                     isDissolving
-                      ? 'ewm-match-dissolve border-[#38E5A5] bg-[#38E5A5]/25 text-[#0B3B2B] dark:text-[#D1FAE5]'
+                      ? 'ewm-match-dissolve border-[#38E5A5] bg-[#38E5A5]/25 text-[#064E3B] dark:text-[#D1FAE5]'
                       : isShaking
-                      ? 'ewm-micro-shake border-[#D97706] bg-[#FEF3C7] dark:bg-[#382914] text-[#92400E] dark:text-[#FDE68A]'
+                      ? 'ewm-micro-shake border-[#F59E0B] bg-[#FEF3C7] dark:bg-[#362712] text-[#92400E] dark:text-[#FDE68A]'
                       : isSelected
-                      ? 'border-[#28665E] dark:border-[#38E5A5] bg-[#EAF3F1] dark:bg-[#1B332C] text-[#143D37] dark:text-[#E6FAF3] ring-2 ring-[#38E5A5]/35'
-                      : 'border-[#E2DDD2] dark:border-[#343B35] bg-[#FAF9F6] hover:bg-[#F2F7F5] dark:bg-[#262B27] dark:hover:bg-[#2A332E] text-[#1C1B18] dark:text-[#F4F7F6]'
+                      ? 'border-[#00C982] dark:border-[#38E5A5] bg-[#ECFDF5] dark:bg-[#142E25] text-[#064E3B] dark:text-[#ECFDF5] ring-2 ring-[#38E5A5]/35 shadow-[0_0_14px_rgba(56,229,165,0.22)]'
+                      : 'border-[#DCE8E3] dark:border-[#263340] bg-[#F9FCFB] hover:bg-[#EFFAF5] dark:bg-[#19222C] dark:hover:bg-[#1E2B36] text-[#121816] dark:text-[#F1F5F9]'
                   }`}
                 >
                   <span className="text-[12px] sm:text-[13.5px] font-bold leading-tight line-clamp-2 break-words">
@@ -504,9 +544,9 @@ export const LightningMatchGame = memo(function LightningMatchGame({
                   <div
                     key={`right-empty-${idx}`}
                     aria-hidden="true"
-                    className="h-[66px] sm:h-[68px] rounded-2xl border border-dashed border-[#ECE8DF] dark:border-[#292F2A] bg-[#FAF9F6]/40 dark:bg-[#1B1F1C]/40 flex items-center justify-center"
+                    className="h-[66px] sm:h-[68px] rounded-2xl border border-dashed border-[#DFECE6] dark:border-[#22303D] bg-[#F6FBF9]/50 dark:bg-[#0F151C]/50 flex items-center justify-center"
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-[#38E5A5]/45" />
+                    <Sparkles className="w-3.5 h-3.5 text-[#00C982]/45 dark:text-[#38E5A5]/45" />
                   </div>
                 );
               }
@@ -521,14 +561,14 @@ export const LightningMatchGame = memo(function LightningMatchGame({
                   type="button"
                   disabled={isDissolving}
                   onClick={() => handleTapRight(idx)}
-                  className={`w-full h-[66px] sm:h-[68px] px-2.5 sm:px-3.5 py-2 rounded-2xl border text-left flex flex-col justify-center cursor-pointer overflow-hidden ${
+                  className={`w-full h-[66px] sm:h-[68px] px-2.5 sm:px-3.5 py-2 rounded-2xl border text-left flex flex-col justify-center cursor-pointer overflow-hidden transition-colors ${
                     isDissolving
-                      ? 'ewm-match-dissolve border-[#38E5A5] bg-[#38E5A5]/25 text-[#0B3B2B] dark:text-[#D1FAE5]'
+                      ? 'ewm-match-dissolve border-[#38E5A5] bg-[#38E5A5]/25 text-[#064E3B] dark:text-[#D1FAE5]'
                       : isShaking
-                      ? 'ewm-micro-shake border-[#D97706] bg-[#FEF3C7] dark:bg-[#382914] text-[#92400E] dark:text-[#FDE68A]'
+                      ? 'ewm-micro-shake border-[#F59E0B] bg-[#FEF3C7] dark:bg-[#362712] text-[#92400E] dark:text-[#FDE68A]'
                       : isSelected
-                      ? 'border-[#28665E] dark:border-[#38E5A5] bg-[#EAF3F1] dark:bg-[#1B332C] text-[#143D37] dark:text-[#E6FAF3] ring-2 ring-[#38E5A5]/35'
-                      : 'border-[#E2DDD2] dark:border-[#343B35] bg-[#FAF9F6] hover:bg-[#F2F7F5] dark:bg-[#262B27] dark:hover:bg-[#2A332E] text-[#1C1B18] dark:text-[#F4F7F6]'
+                      ? 'border-[#00C982] dark:border-[#38E5A5] bg-[#ECFDF5] dark:bg-[#142E25] text-[#064E3B] dark:text-[#ECFDF5] ring-2 ring-[#38E5A5]/35 shadow-[0_0_14px_rgba(56,229,165,0.22)]'
+                      : 'border-[#DCE8E3] dark:border-[#263340] bg-[#F9FCFB] hover:bg-[#EFFAF5] dark:bg-[#19222C] dark:hover:bg-[#1E2B36] text-[#121816] dark:text-[#F1F5F9]'
                   }`}
                 >
                   <span className="text-[12px] sm:text-[13px] font-semibold leading-tight line-clamp-2 break-words">

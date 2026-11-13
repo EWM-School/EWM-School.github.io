@@ -9,6 +9,7 @@
     "start": "tsx server.ts",
     "build": "vite build",
     "preview": "vite preview",
+    "preview:mobile": "node scripts/preview-mobile.mjs",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test": "node scripts/run-tests.mjs",

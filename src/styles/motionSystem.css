@@ -10,9 +10,77 @@
   --ewm-duration-tab: 180ms;
   --ewm-duration-slide: 220ms;
   --ewm-duration-max: 250ms;
+  --ewm-neon: #00c982;
+  --ewm-neon-strong: #10d990;
+  --ewm-neon-glow: rgba(16, 217, 144, 0.24);
+}
+
+html.dark {
   --ewm-neon: #38e5a5;
   --ewm-neon-strong: #22c58b;
-  --ewm-neon-glow: rgba(56, 229, 165, 0.28);
+  --ewm-neon-glow: rgba(56, 229, 165, 0.36);
+}
+
+/* Calibrated Neon Focal Utilities (+10% to +15% Controlled Luminance in Dark & Light) */
+.ewm-neon-logo {
+  color: #00b876;
+  text-shadow: 0 2px 12px rgba(16, 217, 144, 0.28);
+}
+
+html.dark .ewm-neon-logo {
+  color: #38e5a5;
+  text-shadow: 0 0 14px rgba(56, 229, 165, 0.44);
+}
+
+.ewm-neon-progress {
+  box-shadow: 0 4px 18px rgba(16, 217, 144, 0.26);
+}
+
+html.dark .ewm-neon-progress {
+  box-shadow: 0 0 14px rgba(56, 229, 165, 0.38);
+}
+
+.ewm-surface-neon {
+  border-color: rgba(16, 217, 144, 0.28);
+  box-shadow: 0 4px 18px rgba(16, 217, 144, 0.1);
+}
+
+html.dark .ewm-surface-neon {
+  border-color: rgba(56, 229, 165, 0.22);
+  box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.65), 0 0 20px -8px rgba(56, 229, 165, 0.16);
+}
+
+/* Pulsing Neon-Green Microphone Halo (Speaking Lab Acoustic Stage) */
+@keyframes ewmMicHaloPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 5px rgba(16, 217, 144, 0.2),
+      0 0 22px rgba(56, 229, 165, 0.42);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow:
+      0 0 0 9px rgba(56, 229, 165, 0.26),
+      0 0 32px rgba(56, 229, 165, 0.56);
+    transform: scale(1.03);
+  }
+}
+
+.ewm-mic-halo {
+  box-shadow:
+    0 0 0 5px rgba(16, 217, 144, 0.22),
+    0 0 22px rgba(56, 229, 165, 0.38);
+}
+
+html.dark .ewm-mic-halo {
+  box-shadow:
+    0 0 0 6px rgba(56, 229, 165, 0.24),
+    0 0 26px rgba(56, 229, 165, 0.46);
+}
+
+.ewm-mic-halo-pulse {
+  animation: ewmMicHaloPulse 2000ms var(--ewm-ease-out) infinite;
 }
 
 /* 1. Post-Login Tactile Feedback (Buttons & Interactive Surfaces) */
@@ -185,6 +253,7 @@
   .ewm-pillar-enter,
   .ewm-micro-shake,
   .ewm-breathing-ring,
+  .ewm-mic-halo-pulse,
   .ewm-float-xp,
   .ewm-audio-loading,
   .ewm-match-dissolve,

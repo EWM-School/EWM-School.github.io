@@ -1681,6 +1681,22 @@ app.post('/api/gemini/evaluate-pronunciation', async (req, res) => {
   }
 });
 
+app.get('/api/dev/tunnel', async (_req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.json({ active: false, tunnelUrl: null });
+  }
+  try {
+    const tunnelFile = path.join(__dirname, '.tunnel-url.tmp');
+    const raw = (await fs.promises.readFile(tunnelFile, 'utf-8')).trim();
+    if (/^https:\/\/[a-z0-9.-]+/i.test(raw)) {
+      return res.json({ active: true, tunnelUrl: raw });
+    }
+  } catch {
+    // No active tunnel file
+  }
+  return res.json({ active: false, tunnelUrl: null });
+});
+
 // Mount Vite in dev mode or serve static files in production, injecting absolute HTTPS OpenGraph URLs
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
@@ -1689,6 +1705,7 @@ async function startServer() {
       server: {
         middlewareMode: true,
         hmr: false,
+        allowedHosts: true,
       },
       appType: 'custom',
     });

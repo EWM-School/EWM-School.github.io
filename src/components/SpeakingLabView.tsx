@@ -59,6 +59,12 @@ const FREE_PRACTICE_SUGGESTIONS = [
   "To be honest, it's worth a shot.",
 ];
 
+const STUDIO_SYMMETRIC_WAVE_ENVELOPE = [
+  0.09, 0.13, 0.19, 0.36, 0.56, 0.41, 0.24, 0.46, 0.66, 0.38, 0.22, 0.52, 0.82,
+  0.96, 1.0, 0.94, 0.78, 0.5, 0.24, 0.4, 0.66, 0.48, 0.25, 0.42, 0.56, 0.34,
+  0.19, 0.13, 0.09,
+] as const;
+
 export const SpeakingLabView = memo(function SpeakingLabView({
   allCards,
   studyCards,
@@ -348,7 +354,7 @@ export const SpeakingLabView = memo(function SpeakingLabView({
       className="ewm-pillar-enter space-y-4"
     >
       {/* 1. SESSION HEADER & PRACTICE SELECTION */}
-      <div className="rounded-3xl border border-[#E4E0D8] dark:border-[#2B302B] bg-white dark:bg-[#1E221E] p-4 sm:p-5 shadow-xs space-y-3.5">
+      <div className="rounded-3xl border border-[#10D990]/30 dark:border-[#38E5A5]/22 bg-white dark:bg-[#131B23] p-4 sm:p-5 shadow-[0_4px_18px_rgba(16,217,144,0.12)] dark:shadow-[0_10px_28px_rgba(0,0,0,0.42),0_0_18px_rgba(56,229,165,0.06)] space-y-3.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Smart Practice Filter Pills */}
           <div
@@ -368,10 +374,10 @@ export const SpeakingLabView = memo(function SpeakingLabView({
                 setSelectedWordIdx(null);
                 setXpAwardState(null);
               }}
-              className={`min-h-[38px] inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              className={`min-h-[38px] inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer border ${
                 practiceMode === 'review'
-                  ? 'bg-[#28665E] text-white dark:bg-[#2EA98C] dark:text-[#0E1715] shadow-2xs'
-                  : 'bg-[#F3F1EC] hover:bg-[#E8E4DB] dark:bg-[#272C27] dark:hover:bg-[#303630] text-[#5C574E] dark:text-[#C5C0B5]'
+                  ? 'border-[#00C982] bg-[#00A86E] text-white dark:border-[#38E5A5]/60 dark:bg-[#38E5A5]/18 dark:text-[#38E5A5] shadow-[0_2px_12px_rgba(16,217,144,0.24)]'
+                  : 'border-transparent bg-[#EFF6F3] hover:bg-[#E2F0EA] dark:bg-[#1C2631] dark:hover:bg-[#24303E] text-[#334155] dark:text-[#B8C7D4]'
               }`}
             >
               <BookOpenCheck className="w-3.5 h-3.5 shrink-0" />
@@ -390,10 +396,10 @@ export const SpeakingLabView = memo(function SpeakingLabView({
                 setSelectedWordIdx(null);
                 setXpAwardState(null);
               }}
-              className={`min-h-[38px] inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              className={`min-h-[38px] inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer border ${
                 practiceMode === 'catalog'
-                  ? 'bg-[#28665E] text-white dark:bg-[#2EA98C] dark:text-[#0E1715] shadow-2xs'
-                  : 'bg-[#F3F1EC] hover:bg-[#E8E4DB] dark:bg-[#272C27] dark:hover:bg-[#303630] text-[#5C574E] dark:text-[#C5C0B5]'
+                  ? 'border-[#00C982] bg-[#00A86E] text-white dark:border-[#38E5A5]/60 dark:bg-[#38E5A5]/18 dark:text-[#38E5A5] shadow-[0_2px_12px_rgba(16,217,144,0.24)]'
+                  : 'border-transparent bg-[#EFF6F3] hover:bg-[#E2F0EA] dark:bg-[#1C2631] dark:hover:bg-[#24303E] text-[#334155] dark:text-[#B8C7D4]'
               }`}
             >
               <FolderOpen className="w-3.5 h-3.5 shrink-0" />
@@ -411,10 +417,10 @@ export const SpeakingLabView = memo(function SpeakingLabView({
                 setSelectedWordIdx(null);
                 setXpAwardState(null);
               }}
-              className={`min-h-[38px] inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              className={`min-h-[38px] inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer border ${
                 practiceMode === 'free'
-                  ? 'bg-[#28665E] text-white dark:bg-[#2EA98C] dark:text-[#0E1715] shadow-2xs'
-                  : 'bg-[#F3F1EC] hover:bg-[#E8E4DB] dark:bg-[#272C27] dark:hover:bg-[#303630] text-[#5C574E] dark:text-[#C5C0B5]'
+                  ? 'border-[#00C982] bg-[#00A86E] text-white dark:border-[#38E5A5]/60 dark:bg-[#38E5A5]/18 dark:text-[#38E5A5] shadow-[0_2px_12px_rgba(16,217,144,0.24)]'
+                  : 'border-transparent bg-[#EFF6F3] hover:bg-[#E2F0EA] dark:bg-[#1C2631] dark:hover:bg-[#24303E] text-[#334155] dark:text-[#B8C7D4]'
               }`}
             >
               <PenLine className="w-3.5 h-3.5 shrink-0" />
@@ -424,15 +430,15 @@ export const SpeakingLabView = memo(function SpeakingLabView({
 
           {/* Reference Accent (US vs UK) & Native Speed (1.0x vs 0.8x) */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex p-0.5 rounded-xl bg-[#F0EDE6] dark:bg-[#272C27] border border-[#E4E0D8] dark:border-[#343A34]">
+            <div className="inline-flex p-0.5 rounded-xl bg-[#EDF5F2] dark:bg-[#1B2530] border border-[#10D990]/25 dark:border-[#38E5A5]/20">
               <button
                 type="button"
                 data-testid="speaking-accent-us"
                 onClick={() => handleSwitchAccent('us')}
                 className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                   accentUi === 'us'
-                    ? 'bg-[#28665E] text-white'
-                    : 'text-[#5C574E] dark:text-[#AFAAA0]'
+                    ? 'bg-[#00A86E] dark:bg-[#38E5A5] text-white dark:text-[#081510]'
+                    : 'text-[#475569] dark:text-[#9FB0BF]'
                 }`}
               >
                 🇺🇸 US
@@ -443,15 +449,15 @@ export const SpeakingLabView = memo(function SpeakingLabView({
                 onClick={() => handleSwitchAccent('uk')}
                 className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                   accentUi === 'uk'
-                    ? 'bg-[#243B53] text-white'
-                    : 'text-[#5C574E] dark:text-[#AFAAA0]'
+                    ? 'bg-[#1D4ED8] dark:bg-[#38BDF8] text-white dark:text-[#081520]'
+                    : 'text-[#475569] dark:text-[#9FB0BF]'
                 }`}
               >
                 🇬🇧 UK
               </button>
             </div>
 
-            <div className="inline-flex p-0.5 rounded-xl bg-[#F0EDE6] dark:bg-[#272C27] border border-[#E4E0D8] dark:border-[#343A34]">
+            <div className="inline-flex p-0.5 rounded-xl bg-[#EDF5F2] dark:bg-[#1B2530] border border-[#10D990]/25 dark:border-[#38E5A5]/20">
               <button
                 type="button"
                 data-testid="speaking-speed-normal"
@@ -461,8 +467,8 @@ export const SpeakingLabView = memo(function SpeakingLabView({
                 }}
                 className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-mono-num font-semibold transition-colors cursor-pointer ${
                   cadence === '1.0x'
-                    ? 'bg-white dark:bg-[#181B18] text-[#1C1B18] dark:text-[#F3F1EC] shadow-2xs'
-                    : 'text-[#6B655C] dark:text-[#A39E93]'
+                    ? 'bg-white dark:bg-[#111820] text-[#0F172A] dark:text-[#F1F7F5] shadow-2xs'
+                    : 'text-[#475569] dark:text-[#9FB0BF]'
                 }`}
               >
                 1.0x Natural
@@ -476,8 +482,8 @@ export const SpeakingLabView = memo(function SpeakingLabView({
                 }}
                 className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-mono-num font-semibold transition-colors cursor-pointer ${
                   cadence === '0.8x'
-                    ? 'bg-[#FDF5E8] dark:bg-[#2F261A] text-[#9A5B13] dark:text-[#E6B472] shadow-2xs'
-                    : 'text-[#6B655C] dark:text-[#A39E93]'
+                    ? 'bg-[#FEF3C7] dark:bg-[#332714] text-[#92400E] dark:text-[#FCD34D] shadow-2xs'
+                    : 'text-[#475569] dark:text-[#9FB0BF]'
                 }`}
               >
                 0.8x Cadenciado
@@ -644,8 +650,8 @@ export const SpeakingLabView = memo(function SpeakingLabView({
         </div>
       ) : (
         <>
-          {/* 2. CENTRAL ACOUSTIC STAGE (ZERO VISUAL CLUTTER) */}
-          <div className="rounded-3xl border border-[#E4E0D8] dark:border-[#2B302B] bg-white dark:bg-[#1E221E] p-5 sm:p-8 shadow-xs space-y-6">
+          {/* 2. CENTRAL ACOUSTIC STAGE (STUDIO WAVEFORM + DOCKED HALO MIC + INLINE CALIBRATED PHRASE) */}
+          <div className="rounded-3xl border border-[#10D990]/30 dark:border-[#38E5A5]/24 bg-white dark:bg-[#131B23] p-5 sm:p-8 shadow-[0_6px_22px_rgba(16,217,144,0.12)] dark:shadow-[0_14px_38px_rgba(0,0,0,0.48),0_0_22px_rgba(56,229,165,0.08)] space-y-6">
             {/* Offline Self-Check Notice */}
             {(!isOnline || offlineSelfCheckNotice) && (
               <div className="rounded-2xl border border-[#E5C9A3] dark:border-[#574328] bg-[#FDF5E8] dark:bg-[#2B2318] px-4 py-3 flex items-start gap-3 text-xs sm:text-sm text-[#8A5110] dark:text-[#E6B472]">
@@ -657,70 +663,94 @@ export const SpeakingLabView = memo(function SpeakingLabView({
               </div>
             )}
 
-            {/* Target Sentence & Discreet Translation */}
-            <div className="text-center max-w-2xl mx-auto space-y-2.5">
-              <h2
-                style={{ textWrap: 'balance' }}
-                data-testid="speaking-stage-target"
-                className="font-display text-2xl sm:text-4xl font-bold tracking-tight text-[#1C1B18] dark:text-[#F4F2EC] leading-tight"
+            {/* Top Studio Prompt + Native Model Trigger */}
+            <div className="flex flex-wrap items-center justify-between gap-2.5 max-w-2xl mx-auto">
+              <p className="text-xs sm:text-sm font-semibold tracking-wide text-[#475569] dark:text-[#A8BAC8]">
+                Repita a frase em voz alta:
+              </p>
+
+              <button
+                type="button"
+                data-testid="speaking-listen-model-btn"
+                aria-pressed={nativeMainState !== 'idle'}
+                aria-busy={nativeMainState === 'loading'}
+                onClick={() =>
+                  handleSpeakNative(targetText, {
+                    sourceId: 'speaking-model-main',
+                    role: targetPedagogicalRole,
+                  })
+                }
+                className={`min-h-[38px] inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${stateMotionClass(
+                  nativeMainState
+                )} ${
+                  nativeMainState !== 'idle'
+                    ? 'bg-[#00A86E] dark:bg-[#38E5A5] text-white dark:text-[#071510] border-[#00C982] dark:border-[#38E5A5] shadow-[0_0_14px_rgba(56,229,165,0.35)]'
+                    : 'bg-[#EFF8F4] hover:bg-[#E1F3EC] dark:bg-[#1A2530] dark:hover:bg-[#21303E] border-[#10D990]/35 dark:border-[#38E5A5]/28 text-[#0F5C42] dark:text-[#6EE7B7]'
+                }`}
               >
-                {targetText}
-              </h2>
-
-              {contextualTranslationPt && (
-                <p className="text-xs sm:text-sm text-[#6B655C] dark:text-[#A39E93] leading-relaxed">
-                  {contextualTranslationPt}
-                </p>
-              )}
-
-              {practiceMode !== 'free' &&
-                contentTarget === 'term' &&
-                phonetics && (
-                  <p className="text-xs font-mono-num text-[#28665E] dark:text-[#68B4A8]">
-                    {accentUi === 'uk'
-                      ? `UK ${phonetics.uk}`
-                      : `US ${phonetics.us}`}
-                  </p>
-                )}
-
-              <div className="pt-1">
-                <button
-                  type="button"
-                  data-testid="speaking-listen-model-btn"
-                  aria-pressed={nativeMainState !== 'idle'}
-                  aria-busy={nativeMainState === 'loading'}
-                  onClick={() =>
-                    handleSpeakNative(targetText, {
-                      sourceId: 'speaking-model-main',
-                      role: targetPedagogicalRole,
-                    })
-                  }
-                  className={`min-h-[42px] inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-xs sm:text-sm font-semibold transition-all cursor-pointer ${stateMotionClass(
-                    nativeMainState
-                  )} ${
-                    nativeMainState !== 'idle'
-                      ? 'bg-[#28665E] text-white border-[#28665E]'
-                      : 'bg-[#FAF8F4] hover:bg-[#EFECE4] dark:bg-[#252A25] dark:hover:bg-[#2E342E] border-[#DFDAD0] dark:border-[#343A34] text-[#225851] dark:text-[#86CEC2]'
-                  }`}
-                >
-                  <AudioStatusIcon
-                    state={nativeMainState}
-                    idleClassName="w-4 h-4 shrink-0"
-                    activeClassName="w-4 h-3.5"
-                  />
-                  <span>
-                    {nativeMainState === 'loading'
-                      ? 'Carregando Modelo Nativo...'
-                      : nativeMainState === 'playing'
-                      ? 'Reproduzindo Modelo Nativo...'
-                      : `Ouvir Modelo Nativo (${accentUi.toUpperCase()} · ${cadence})`}
-                  </span>
-                </button>
-              </div>
+                <AudioStatusIcon
+                  state={nativeMainState}
+                  idleClassName="w-4 h-4 shrink-0"
+                  activeClassName="w-4 h-3.5"
+                />
+                <span>
+                  {nativeMainState === 'loading'
+                    ? 'Carregando Modelo Nativo...'
+                    : nativeMainState === 'playing'
+                    ? 'Reproduzindo Modelo Nativo...'
+                    : `Ouvir Modelo Nativo (${accentUi.toUpperCase()} · ${cadence})`}
+                </span>
+              </button>
             </div>
 
-            {/* Protagonist Microphone Button + Real-Time Soundwave Visualizer */}
-            <div className="flex flex-col items-center justify-center space-y-4 pt-1">
+            {/* Acoustic Oscillogram Box + Docked Central Halo Microphone */}
+            <div className="max-w-xl mx-auto flex flex-col items-center">
+              <div
+                aria-hidden="true"
+                data-testid="speaking-acoustic-stage-box"
+                className="w-full rounded-3xl border border-[#00C982]/35 dark:border-[#38E5A5]/28 bg-[#ECF9F3] dark:bg-[#17202B] px-4 sm:px-8 pt-8 pb-14 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_6px_20px_rgba(16,217,144,0.12)] dark:shadow-[inset_0_1px_0_rgba(56,229,165,0.10),0_10px_28px_rgba(0,0,0,0.45)] flex items-center justify-center"
+              >
+                {/* Symmetrical Center-Axis Vertical Waveform Bars */}
+                <div className="h-24 sm:h-28 w-full max-w-md flex items-center justify-center gap-1 sm:gap-1.5">
+                  {STUDIO_SYMMETRIC_WAVE_ENVELOPE.map((envWeight, idx) => {
+                    const liveSample =
+                      waveformBars[idx % Math.max(1, waveformBars.length)] ?? 0.2;
+                    const activeScale = isRecording
+                      ? Math.min(
+                          100,
+                          Math.max(
+                            12,
+                            Math.round(
+                              (envWeight * 0.48 +
+                                liveSample * 0.65 +
+                                Math.min(0.35, voiceLevel) * 0.35) *
+                                100
+                            )
+                          )
+                        )
+                      : Math.max(8, Math.round(envWeight * 78));
+
+                    return (
+                      <span
+                        key={idx}
+                        style={{
+                          height: `${activeScale}%`,
+                          opacity: isRecording
+                            ? 0.72 + Math.min(0.28, voiceLevel)
+                            : 0.62 + envWeight * 0.34,
+                        }}
+                        className={`w-1 sm:w-1.5 rounded-full transition-[height,opacity] duration-75 bg-gradient-to-b from-[#00C982] via-[#10D990] to-[#06B6D4] dark:from-[#6EE7B7] dark:via-[#38E5A5] dark:to-[#22D3EE] ${
+                          isRecording
+                            ? 'shadow-[0_0_10px_rgba(56,229,165,0.55)]'
+                            : 'dark:shadow-[0_0_6px_rgba(56,229,165,0.28)]'
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Central Circular Microphone Button Docked on Bottom Edge of Stage */}
               <button
                 type="button"
                 disabled={isEvaluating || isRequestingMic}
@@ -739,49 +769,24 @@ export const SpeakingLabView = memo(function SpeakingLabView({
                     void startRecording();
                   }
                 }}
-                className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center transition-all cursor-pointer select-none shadow-lg ${
+                className={`-mt-10 sm:-mt-12 relative z-10 w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center transition-all cursor-pointer select-none border-[3.5px] ${
                   isRecording
-                    ? 'ewm-breathing-ring bg-[#B5443C] hover:bg-[#9F3932] text-white scale-105'
+                    ? 'ewm-breathing-ring border-[#FB7185] bg-[#881337] hover:bg-[#9F1239] text-white scale-105 shadow-[0_0_28px_rgba(244,63,94,0.55)]'
                     : isEvaluating || isRequestingMic
-                    ? 'bg-[#E5E0D5] dark:bg-[#2B302B] text-[#7D776C] dark:text-[#989388] cursor-wait'
-                    : 'bg-[#28665E] hover:bg-[#1F524B] dark:bg-[#2EA98C] dark:hover:bg-[#269279] text-white dark:text-[#0B1412]'
+                    ? 'border-[#94A3B8]/50 bg-[#E2E8F0] dark:bg-[#1E293B] text-[#475569] dark:text-[#94A3B8] cursor-wait'
+                    : 'ewm-mic-halo ewm-mic-halo-pulse border-[#00C982] dark:border-[#38E5A5] bg-[#0F241F] hover:bg-[#133029] dark:bg-[#15252F] dark:hover:bg-[#1B303C] text-white'
                 }`}
               >
                 {isEvaluating || isRequestingMic ? (
-                  <Loader2 className="w-8 h-8 animate-spin" />
+                  <Loader2 className="w-8 h-8 animate-spin text-[#00C982] dark:text-[#38E5A5]" />
                 ) : isRecording ? (
                   <Square className="w-7 h-7 fill-current" />
                 ) : (
-                  <Mic className="w-8 h-8 sm:w-9 sm:h-9" />
+                  <Mic className="w-8 h-8 sm:w-9 sm:h-9 text-white" />
                 )}
               </button>
 
-              {/* Fluid Real-Time Soundwave Visualizer */}
-              <div
-                aria-hidden="true"
-                className="h-10 flex items-center justify-center gap-1.5 px-4"
-              >
-                {waveformBars.map((bar, idx) => (
-                  <span
-                    key={idx}
-                    style={{
-                      height: `${
-                        isRecording
-                          ? Math.max(18, Math.round(bar * 100))
-                          : 18
-                      }%`,
-                      opacity: isRecording ? 0.55 + Math.min(0.45, voiceLevel) : 0.25,
-                    }}
-                    className={`w-1.5 rounded-full transition-[height,opacity] duration-75 ${
-                      isRecording
-                        ? 'bg-[#2EA98C]'
-                        : 'bg-[#C8C3B8] dark:bg-[#3A413A]'
-                    }`}
-                  />
-                ))}
-              </div>
-
-              <p className="text-xs font-medium text-[#6B655C] dark:text-[#A39E93]">
+              <p className="mt-3 text-xs font-medium text-[#475569] dark:text-[#9FB0BF] text-center">
                 {isRequestingMic
                   ? 'Solicitando acesso ao microfone...'
                   : isRecording
@@ -791,8 +796,90 @@ export const SpeakingLabView = memo(function SpeakingLabView({
                     )}s restantes) · Toque para concluir`
                   : isEvaluating
                   ? 'Analisando fonemas, vogais e ritmo acústico...'
+                  : evaluation && evaluation.audioQualityStatus === 'CLEAR'
+                  ? 'Feedback em tempo real · Toque em qualquer palavra iluminada para ouvir'
                   : 'Toque no microfone e leia a frase com naturalidade'}
               </p>
+            </div>
+
+            {/* Target Sentence with Inline Illuminated Word Calibration Pills */}
+            <div className="text-center max-w-2xl mx-auto space-y-2.5 pt-1">
+              <h2
+                style={{ textWrap: 'balance' }}
+                data-testid="speaking-stage-target"
+                className="font-display text-2xl sm:text-4xl font-bold tracking-tight text-[#0F172A] dark:text-[#F4F8F6] leading-snug"
+              >
+                {evaluation &&
+                evaluation.audioQualityStatus === 'CLEAR' &&
+                evaluation.wordBreakdown.length > 0
+                  ? evaluation.wordBreakdown.map((item, idx) => {
+                      const isSelected = (selectedWordIdx ?? 0) === idx;
+                      const inlinePillClass =
+                        item.status === 'EXACT'
+                          ? 'bg-[#10D990]/18 dark:bg-[#38E5A5]/20 border-[#00C982]/50 dark:border-[#38E5A5]/55 text-[#065F46] dark:text-[#6EE7B7] shadow-[0_0_12px_rgba(56,229,165,0.20)]'
+                          : item.status === 'CLOSE_NEEDS_POLISH'
+                          ? 'bg-[#F59E0B]/18 dark:bg-[#FBBF24]/20 border-[#D97706]/50 dark:border-[#FBBF24]/55 text-[#92400E] dark:text-[#FDE68A] shadow-[0_0_12px_rgba(251,191,36,0.20)]'
+                          : 'bg-[#F43F5E]/18 dark:bg-[#FB7185]/22 border-[#E11D48]/50 dark:border-[#FB7185]/55 text-[#9F1239] dark:text-[#FDA4AF] shadow-[0_0_12px_rgba(251,113,133,0.22)]';
+
+                      return (
+                        <React.Fragment key={`inline-word-${idx}`}>
+                          {idx > 0 ? ' ' : ''}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedWordIdx(idx);
+                              handleSpeakNative(item.word, {
+                                sourceId: `speaking-inline-word-${idx}`,
+                                role: 'term',
+                              });
+                            }}
+                            className={`inline-flex items-center px-2 py-0.5 my-0.5 rounded-xl border font-bold transition-transform cursor-pointer ${inlinePillClass} ${
+                              isSelected
+                                ? 'ring-2 ring-[#00C982] dark:ring-[#38E5A5] scale-[1.03]'
+                                : 'hover:scale-[1.02]'
+                            }`}
+                          >
+                            {item.word}
+                          </button>
+                        </React.Fragment>
+                      );
+                    })
+                  : targetText}
+              </h2>
+
+              {evaluation &&
+                evaluation.audioQualityStatus === 'CLEAR' &&
+                evaluation.wordBreakdown.length > 0 && (
+                  <p className="text-[11px] sm:text-xs font-semibold tracking-wide">
+                    <span className="text-[#059669] dark:text-[#38E5A5]">
+                      Calibração fonética
+                    </span>
+                    <span className="text-[#64748B] dark:text-[#94A3B8]"> · </span>
+                    <span className="text-[#D97706] dark:text-[#FBBF24]">
+                      lapidar vogal/ritmo
+                    </span>
+                    <span className="text-[#64748B] dark:text-[#94A3B8]"> · </span>
+                    <span className="text-[#E11D48] dark:text-[#FB7185]">
+                      revisar som
+                    </span>
+                  </p>
+                )}
+
+              {contextualTranslationPt && (
+                <p className="text-xs sm:text-sm text-[#475569] dark:text-[#9FB0BF] leading-relaxed">
+                  {contextualTranslationPt}
+                </p>
+              )}
+
+              {practiceMode !== 'free' &&
+                contentTarget === 'term' &&
+                phonetics && (
+                  <p className="text-xs font-mono-num text-[#047857] dark:text-[#38E5A5]">
+                    {accentUi === 'uk'
+                      ? `UK ${phonetics.uk}`
+                      : `US ${phonetics.us}`}
+                  </p>
+                )}
             </div>
 
             {/* Friendly Microphone Permission Instructions */}

@@ -85,7 +85,7 @@ export const WorkspaceProgressBanner = memo(function WorkspaceProgressBanner({
   return (
     <section
       aria-label="Resumo de Progresso, XP e Posição no Ranking"
-      className="relative rounded-2xl border border-[#DFDAD0] dark:border-[#2B322C] bg-white/95 dark:bg-[#1E221F]/95 px-3 py-2.5 sm:px-4 sm:py-3 shadow-2xs backdrop-blur-xs transition-colors"
+      className="relative rounded-2xl border ewm-surface-neon bg-white/95 dark:bg-[#131A22]/95 px-3 py-2.5 sm:px-4 sm:py-3 backdrop-blur-xs transition-colors"
     >
       <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
         {/* Left: Daily Goal Progress + Mastery Ratio */}
@@ -93,8 +93,8 @@ export const WorkspaceProgressBanner = memo(function WorkspaceProgressBanner({
           <div
             className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
               isGoalReached
-                ? 'bg-[#FEF3C7] dark:bg-[#78350F]/40 text-[#D97706] dark:text-[#FBBF24]'
-                : 'bg-[#EAF3F1] dark:bg-[#1B2E29] text-[#28665E] dark:text-[#38E5A5]'
+                ? 'bg-[#FEF3C7] dark:bg-[#78350F]/40 text-[#D97706] dark:text-[#FBBF24] shadow-[0_0_14px_rgba(251,191,36,0.3)]'
+                : 'bg-[#ECFDF5] dark:bg-[#142D24] text-[#00C982] dark:text-[#38E5A5] border border-[#00C982]/25 dark:border-[#38E5A5]/25'
             }`}
           >
             {isGoalReached ? (
@@ -106,7 +106,7 @@ export const WorkspaceProgressBanner = memo(function WorkspaceProgressBanner({
 
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="font-display text-xs sm:text-[13px] font-bold text-[#1C1B18] dark:text-[#EBE7DE]">
+              <span className="font-display text-xs sm:text-[13px] font-bold text-[#121816] dark:text-[#F1F5F9]">
                 Progresso Diário
               </span>
               {isGoalReached && (
@@ -117,9 +117,9 @@ export const WorkspaceProgressBanner = memo(function WorkspaceProgressBanner({
               )}
             </div>
 
-            <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-[#6B655C] dark:text-[#A8B0AA] font-mono-num">
+            <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-[#52605B] dark:text-[#9CB0A9] font-mono-num">
               <span>
-                <strong className="text-[#1C1B18] dark:text-[#EBE7DE] font-bold">
+                <strong className="text-[#121816] dark:text-[#F1F5F9] font-bold">
                   {todayCount}
                 </strong>
                 /{goal} hoje
@@ -128,12 +128,12 @@ export const WorkspaceProgressBanner = memo(function WorkspaceProgressBanner({
                 ·
               </span>
               <span className="hidden sm:inline">
-                <strong className="text-[#28665E] dark:text-[#68B4A8] font-semibold">
+                <strong className="text-[#059669] dark:text-[#38E5A5] font-semibold">
                   {masteredCount}
                 </strong>
                 /{totalCards} dominados
               </span>
-              <span className="sm:hidden font-bold text-[#28665E] dark:text-[#68B4A8]">
+              <span className="sm:hidden font-bold text-[#059669] dark:text-[#38E5A5]">
                 {percentage}%
               </span>
             </div>
@@ -148,9 +148,9 @@ export const WorkspaceProgressBanner = memo(function WorkspaceProgressBanner({
               type="button"
               onClick={onOpenRankingModal}
               title="Pontuação XP real acumulada neste mês"
-              className="inline-flex items-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-xl border border-[#C6DBD7] dark:border-[#38E5A5]/30 bg-[#EAF3F1]/90 dark:bg-[#172823] text-[11px] sm:text-xs font-bold text-[#1E4E47] dark:text-[#38E5A5] font-mono-num cursor-pointer"
+              className="inline-flex items-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-xl border border-[#00C982]/40 dark:border-[#38E5A5]/38 bg-[#ECFDF5] dark:bg-[#122A22] text-[11px] sm:text-xs font-bold text-[#047857] dark:text-[#38E5A5] shadow-[0_2px_12px_rgba(16,217,144,0.18)] dark:shadow-[0_0_12px_rgba(56,229,165,0.2)] font-mono-num cursor-pointer"
             >
-              <Zap className="w-3.5 h-3.5 shrink-0 fill-current opacity-85" />
+              <Zap className="w-3.5 h-3.5 shrink-0 fill-[#FBBF24] text-[#F59E0B] dark:text-[#FBBF24]" />
               <span>{xpScore} XP</span>
             </button>
             {recentXpDelta && recentXpDelta.amount > 0 && (
@@ -237,15 +237,21 @@ export const WorkspaceProgressBanner = memo(function WorkspaceProgressBanner({
         </div>
       </div>
 
-      {/* Sleek Aligned Progress Bar */}
-      <div className="mt-2 w-full h-1.5 rounded-full bg-[#EAE6DD] dark:bg-[#2A302B] overflow-hidden">
-        <div
-          className={`h-full transition-all duration-300 rounded-full ${
-            isGoalReached
-              ? 'bg-gradient-to-r from-[#D97706] to-[#F59E0B]'
-              : 'bg-gradient-to-r from-[#28665E] to-[#38E5A5]'
-          }`}
-          style={{ width: `${percentage}%` }}
+      {/* Sleek Neon Progress Bar with Golden Spark */}
+      <div className="mt-2.5 flex items-center gap-2">
+        <div className="flex-1 h-2 rounded-full bg-[#E2EFEA] dark:bg-[#1B2632] overflow-visible relative">
+          <div
+            className={`h-full transition-all duration-300 rounded-full ewm-neon-progress ${
+              isGoalReached
+                ? 'bg-gradient-to-r from-[#F59E0B] to-[#FBBF24]'
+                : 'bg-gradient-to-r from-[#00C982] via-[#10D990] to-[#38E5A5]'
+            }`}
+            style={{ width: `${Math.max(percentage, todayCount > 0 ? 6 : 3)}%` }}
+          />
+        </div>
+        <Zap
+          aria-hidden="true"
+          className="w-3.5 h-3.5 shrink-0 text-[#F59E0B] dark:text-[#FBBF24] fill-[#FBBF24] drop-shadow-[0_0_6px_rgba(251,191,36,0.5)]"
         />
       </div>
     </section>

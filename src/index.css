@@ -6,6 +6,28 @@
     --font-display: "Outfit", system-ui, -apple-system, sans-serif;
     --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+    /* Calibrated Neon Light Mode Tokens (WCAG AA dark text + vivid mint/emerald energy) */
+    --ewm-bg-base: #f4f9f7;
+    --ewm-surface: #ffffff;
+    --ewm-text-primary: #121816;
+    --ewm-neon-accent: #00c982;
+    --ewm-neon-bright: #10d990;
+    --ewm-card-border: rgba(16, 217, 144, 0.28);
+    --ewm-halo-shadow: 0 4px 18px rgba(16, 217, 144, 0.22);
+    --ewm-progress-glow: 0 4px 18px rgba(16, 217, 144, 0.28);
+  }
+
+  html.dark {
+    /* Calibrated Neon Dark Mode Tokens (+12% to +15% focal neon luminance on obsidian-emerald) */
+    --ewm-bg-base: #0a0f14;
+    --ewm-surface: #131a22;
+    --ewm-text-primary: #f1f5f9;
+    --ewm-neon-accent: #38e5a5;
+    --ewm-neon-bright: #38e5a5;
+    --ewm-card-border: rgba(56, 229, 165, 0.22);
+    --ewm-halo-shadow: 0 8px 28px -8px rgba(56, 229, 165, 0.22);
+    --ewm-progress-glow: 0 0 14px rgba(56, 229, 165, 0.38);
   }
 
   html {
@@ -19,16 +41,30 @@
   }
 
   body {
-    background-color: #f6f4ef;
-    color: #1c1b18;
+    background-color: #f4f9f7;
+    background-image: radial-gradient(
+      ellipse 85% 42% at 50% -8%,
+      rgba(16, 217, 144, 0.12),
+      transparent 72%
+    );
+    background-attachment: fixed;
+    color: #121816;
     transition: background-color 220ms ease, color 220ms ease;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
   }
 
   html.dark body {
-    background-color: #181a18;
-    color: #ebe7de;
+    background-color: #0a0f14;
+    background-image:
+      radial-gradient(
+        ellipse 85% 45% at 50% -10%,
+        rgba(56, 229, 165, 0.15),
+        transparent 72%
+      ),
+      linear-gradient(180deg, #0a0f14 0%, #0d141a 100%);
+    background-attachment: fixed;
+    color: #f1f5f9;
   }
 
   button,

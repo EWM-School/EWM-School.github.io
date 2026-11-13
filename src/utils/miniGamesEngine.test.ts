@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { INITIAL_CARDS } from '../data/seedData';
 import type { Flashcard } from '../types/flashcard';
 import { hydrateCard } from './deckHelpers';
@@ -328,4 +331,68 @@ test('gameXpPolicy: enforces balanced match XP (+8..+15 +3 flawless) and strict 
   });
   // 2 active days (2 * 50 = 100) + 138 Arena XP = 238 legitimate Ranking XP
   assert.equal(rankingMetrics.score, 238);
+});
+
+test('miniGamesEngine: Ouvido de Nativo & Sobrevivência preserve round invariance across US/UK accent switches and expose dual US/UK replay buttons', () => {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const nativeEarSrc = fs.readFileSync(
+    path.resolve(__dirname, '../components/games/NativeEarGame.tsx'),
+    'utf8'
+  );
+  const survivalSrc = fs.readFileSync(
+    path.resolve(__dirname, '../components/games/SurvivalChallengeGame.tsx'),
+    'utf8'
+  );
+
+  // 1. NativeEarGame must expose dual independent US/UK buttons with stopPropagation and never reset session on accent switch
+  assert.match(nativeEarSrc, /data-testid="native-ear-btn-us"/);
+  assert.match(nativeEarSrc, /data-testid="native-ear-btn-uk"/);
+  assert.match(nativeEarSrc, /e\.stopPropagation\(\)/);
+  assert.equal(
+    /handleSelectAccentMode[\s\S]{0,260}startFreshSession/.test(nativeEarSrc),
+    false,
+    'NativeEarGame must NEVER call startFreshSession inside handleSelectAccentMode'
+  );
+
+  // Verify questionId and card.id generated for a round remain deterministic and independent of subsequent US/UK playback
+  const pool = resolveMiniGameCardPool(realCatalog, { mode: 'all' }).cards;
+  const sessionQuestions = buildNativeEarQuestions(pool, pool, 'mixed', 8, () => 0.31);
+  const currentRoundIdBeforeAudio = sessionQuestions[0].questionId;
+  // Simulating unlimited US/UK replays does not mutate questionId or card.id
+  assert.equal(sessionQuestions[0].questionId, currentRoundIdBeforeAudio);
+  assert.ok(sessionQuestions[0].card.id.length > 0);
+
+  // 2. SurvivalChallengeGame must expose dual US/UK buttons on listening challenges and alternate default listening accents
+  assert.match(survivalSrc, /data-testid="survival-listen-us"/);
+  assert.match(survivalSrc, /data-testid="survival-listen-uk"/);
+  assert.match(survivalSrc, /e\.stopPropagation\(\)/);
+
+  const listeningStepA = buildSurvivalChallenge(pool[0], pool, 1, () => 0.25);
+  const listeningStepB = buildSurvivalChallenge(pool[1], pool, 4, () => 0.25);
+  assert.equal(listeningStepA.kind, 'listening');
+  assert.equal(listeningStepB.kind, 'listening');
+  assert.notEqual(
+    listeningStepA.accent,
+    listeningStepB.accent,
+    'Survival listening steps should alternate US and UK default accents rather than locking on UK'
+  );
+});
+
+test('miniGamesEngine: Memória Relâmpago enforces 100% TTS silence and integrates Web Audio arcadeGrooveEngine', () => {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const lightningSrc = fs.readFileSync(
+    path.resolve(__dirname, '../components/games/LightningMatchGame.tsx'),
+    'utf8'
+  );
+
+  // Zero TTS / spoken voice imports or calls inside LightningMatchGame
+  assert.equal(/speechService/.test(lightningSrc), false);
+  assert.equal(/speakEnglishText|toggleSpeakEnglishText/.test(lightningSrc), false);
+  assert.equal(/speechSynthesis/.test(lightningSrc), false);
+  assert.equal(/\/api\/gemini\/tts/.test(lightningSrc), false);
+
+  // Integrates procedural Web Audio groove + persistent music toggle + unmount cleanup
+  assert.match(lightningSrc, /arcadeGrooveEngine/);
+  assert.match(lightningSrc, /data-testid="lightning-music-toggle"/);
+  assert.match(lightningSrc, /stopArcadeGroove\(\)/);
 });

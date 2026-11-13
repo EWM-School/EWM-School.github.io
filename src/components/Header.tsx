@@ -76,7 +76,7 @@ export const Header = memo(function Header({
     : '';
 
   return (
-    <header className="ios-safe-header sticky top-0 z-20 border-b border-[#E4E0D8] dark:border-[#262C27] bg-[#F6F4EF]/92 dark:bg-[#181A18]/92 backdrop-blur-md transition-colors">
+    <header className="ios-safe-header sticky top-0 z-20 border-b border-[#10D990]/22 dark:border-[#38E5A5]/18 bg-[#F4F9F7]/92 dark:bg-[#0A0F14]/90 backdrop-blur-xl transition-colors">
       <div className="max-w-5xl mx-auto px-3.5 sm:px-6">
         <div className="min-h-[60px] py-1.5 flex items-center justify-between gap-2 sm:gap-3">
           {/* Mobile Brand Lockup (< 768px only; Desktop >= 768px displays Brand Lockup in Sidebar) */}
@@ -85,36 +85,37 @@ export const Header = memo(function Header({
             onClick={onOpenCover}
             title={syncLabel}
             aria-label="Voltar para a capa inicial"
-            className="md:hidden min-h-[44px] flex items-center gap-2 shrink-0 text-left rounded-xl cursor-pointer focus-visible:outline-2 focus-visible:outline-[#28665E]"
+            className="md:hidden min-h-[44px] flex items-center gap-2 shrink-0 text-left rounded-xl cursor-pointer focus-visible:outline-2 focus-visible:outline-[#00C982]"
           >
             <div className="relative">
               <img
                 src={`${import.meta.env.BASE_URL}ewm-logo.jpg`}
                 alt="EWM"
                 referrerPolicy="no-referrer"
-                className="w-9 h-9 rounded-xl object-cover border border-[#E4E0D8] dark:border-[#2E332E] bg-white shrink-0 shadow-2xs"
+                className="w-8 h-8 rounded-xl object-cover border border-[#10D990]/35 dark:border-[#38E5A5]/30 bg-white shrink-0 shadow-2xs"
               />
               <span
                 aria-hidden="true"
-                className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#F6F4EF] dark:border-[#181A18] flex items-center justify-center ${
+                className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#F4F9F7] dark:border-[#0A0F14] flex items-center justify-center ${
                   syncStatus === 'offline'
                     ? 'bg-[#D97706]'
                     : syncStatus === 'syncing'
                     ? 'bg-[#38E5A5]'
                     : syncStatus === 'synced'
-                    ? 'bg-[#28665E] dark:bg-[#38E5A5]'
-                    : 'bg-[#8A857C]'
+                    ? 'bg-[#00C982] dark:bg-[#38E5A5]'
+                    : 'bg-[#8A9A94]'
                 }`}
               />
             </div>
 
-            <span className="sr-only">
-              {syncStatus === 'offline'
-                ? 'Modo Offline'
-                : syncStatus === 'syncing'
-                ? `Sincronizando ${pendingSyncCount}`
-                : 'EWM Keep practicing'}
-            </span>
+            <div className="leading-none">
+              <span className="block font-display text-[15px] font-extrabold tracking-tight ewm-neon-logo">
+                EWM
+              </span>
+              <span className="hidden min-[390px]:block text-[9.5px] font-medium text-[#52605B] dark:text-[#8CA29A]">
+                Keep Practicing
+              </span>
+            </div>
           </button>
 
           {/* Unified Smart Lookup & Phrase Check Trigger Bar (replaces isolated ShieldCheck) */}
@@ -123,16 +124,16 @@ export const Header = memo(function Header({
             onClick={onOpenUnifiedLookup}
             title="Consultar expressão, tradução contextual ou verificar frase (Atalho Ctrl+K)"
             aria-label="Consultar expressão ou verificar frase"
-            className="flex-1 max-w-xl min-h-[42px] flex items-center justify-between gap-2.5 px-3 sm:px-3.5 py-2 rounded-2xl border border-[#DAD5C9] dark:border-[#2F3731] bg-white/95 hover:bg-white dark:bg-[#202521] dark:hover:bg-[#252B26] hover:border-[#28665E]/55 dark:hover:border-[#38E5A5]/45 text-left shadow-2xs group cursor-pointer min-w-0"
+            className="flex-1 max-w-xl min-h-[42px] flex items-center justify-between gap-2.5 px-3 sm:px-3.5 py-2 rounded-2xl border border-[#10D990]/28 dark:border-[#38E5A5]/22 bg-white hover:bg-[#F9FEFC] dark:bg-[#131A22] dark:hover:bg-[#18222C] hover:border-[#00C982] dark:hover:border-[#38E5A5]/55 text-left shadow-[0_4px_18px_rgba(16,217,144,0.08)] dark:shadow-none group cursor-pointer min-w-0"
           >
             <span className="flex items-center gap-2 min-w-0">
-              <Search className="w-4 h-4 text-[#28665E] dark:text-[#38E5A5] shrink-0" />
-              <span className="text-xs sm:text-[13px] font-medium text-[#5C574E] dark:text-[#B5BCB6] group-hover:text-[#1C1B18] dark:group-hover:text-[#EBE7DE] truncate">
+              <Search className="w-4 h-4 text-[#00C982] dark:text-[#38E5A5] shrink-0" />
+              <span className="text-xs sm:text-[13px] font-medium text-[#475550] dark:text-[#B5C4BE] group-hover:text-[#121816] dark:group-hover:text-[#F1F5F9] truncate">
                 Consultar expressão ou verificar frase...
               </span>
             </span>
 
-            <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#EAF3F1] dark:bg-[#1B2B27] text-[#28665E] dark:text-[#68B4A8] text-[10.5px] font-semibold shrink-0">
+            <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#ECFDF5] dark:bg-[#142B23] border border-[#00C982]/25 dark:border-[#38E5A5]/25 text-[#059669] dark:text-[#38E5A5] text-[10.5px] font-bold shrink-0">
               <Sparkles className="w-3 h-3" />
               <span className="hidden lg:inline font-mono-num">Ctrl K</span>
               <span className="lg:hidden">IA</span>

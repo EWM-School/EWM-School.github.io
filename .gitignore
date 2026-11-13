@@ -25,6 +25,8 @@ Thumbs.db
 # Editor / Temp
 .idea/
 *.swp
+.tunnel-url.tmp
+.cloudflared-bin/
 
 # Note: android/ and ios/ Capacitor native projects ARE tracked in version control.
 # Transient native build caches are ignored below:
