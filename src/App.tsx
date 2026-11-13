@@ -67,6 +67,7 @@ import {
   recordDeckUpsertOptimistic,
   recordLeaderboardScoreOptimistic,
   recordQuizScoreOptimistic,
+  recordSurvivalBestStreakOptimistic,
   recordWorkspaceUpdateOptimistic,
   replaceCustomCardsLocal,
   replaceDecksLocal,
@@ -131,10 +132,16 @@ import {
   recordSpeakingPracticeInStats,
   recordStudyTimeInStats,
   saveCachedLeaderboardRecords,
+  saveUserStudyStats,
   setDailyGoalInStats,
   type CloudLeaderboardRecord,
   type UserStudyStats,
 } from './utils/studyMetrics';
+import {
+  recordMiniGameSessionInStats,
+  type MiniGameSessionMetrics,
+  type MiniGameXpAwardOutcome,
+} from './utils/gameXpPolicy';
 import {
   formatCleanExampleSentence,
   toCanonicalExpressionKey,
@@ -752,6 +759,23 @@ export default function App() {
 
         setIsAdmin(result.isAdmin);
 
+        if (result.workspace) {
+          const cloudBestStreak = Math.max(0, Math.floor(result.workspace.survivalBestStreak || 0));
+          const localBestStreak = Math.max(0, Math.floor(userStatsRef.current.survivalBestStreak || 0));
+          if (cloudBestStreak > localBestStreak) {
+            const mergedStats: UserStudyStats = {
+              ...userStatsRef.current,
+              survivalBestStreak: cloudBestStreak,
+            };
+            userStatsRef.current = mergedStats;
+            setUserStats(mergedStats);
+            saveUserStudyStats(mergedStats);
+            void saveStudyStatsLocal(mergedStats);
+          } else if (localBestStreak > cloudBestStreak) {
+            void recordSurvivalBestStreakOptimistic(localBestStreak);
+          }
+        }
+
         if (!result.createdNew && result.workspace) {
           const pending = getPendingEntitySets();
           if (!pending.hasPendingWorkspace) {
@@ -780,6 +804,18 @@ export default function App() {
 
         unsubUser = subscribeUserCloudData(currentUser.uid, {
           onWorkspace: (ws) => {
+            const cloudBestStreak = Math.max(0, Math.floor(ws.survivalBestStreak || 0));
+            const localBestStreak = Math.max(0, Math.floor(userStatsRef.current.survivalBestStreak || 0));
+            if (cloudBestStreak > localBestStreak) {
+              const mergedStats: UserStudyStats = {
+                ...userStatsRef.current,
+                survivalBestStreak: cloudBestStreak,
+              };
+              userStatsRef.current = mergedStats;
+              setUserStats(mergedStats);
+              saveUserStudyStats(mergedStats);
+              void saveStudyStatsLocal(mergedStats);
+            }
             if (getPendingEntitySets().hasPendingWorkspace) return;
             setStudyScope(ws.studyScope);
             if (ws.selectedCardIds.length > 0) {
@@ -1606,6 +1642,7 @@ export default function App() {
 
   const handleTabChange = useCallback(
     (tab: AppTab) => {
+      stopCurrentAudio();
       if (tab === 'study' || tab === 'decks' || tab === 'list') {
         lastStudySubModeRef.current = tab;
       }
@@ -1746,6 +1783,30 @@ export default function App() {
         alreadyRewardedToday: outcome.alreadyRewardedToday,
         dailyCappedOut: outcome.dailyCappedOut,
       };
+    },
+    []
+  );
+
+  const handleMiniGameCompleted = useCallback(
+    (metrics: MiniGameSessionMetrics): MiniGameXpAwardOutcome => {
+      const outcome = recordMiniGameSessionInStats(metrics, userStatsRef.current);
+      userStatsRef.current = outcome.updatedStats;
+      setUserStats(outcome.updatedStats);
+      void saveStudyStatsLocal(outcome.updatedStats);
+
+      if (outcome.beatPreviousRecord && outcome.newSurvivalBestStreak > 0) {
+        void recordSurvivalBestStreakOptimistic(outcome.newSurvivalBestStreak);
+      }
+
+      if (outcome.awardedXp > 0) {
+        setRecentXpDelta({ amount: outcome.awardedXp, key: Date.now() });
+        if (xpDeltaTimerRef.current) window.clearTimeout(xpDeltaTimerRef.current);
+        xpDeltaTimerRef.current = window.setTimeout(() => {
+          setRecentXpDelta(null);
+        }, 1600);
+      }
+
+      return outcome;
     },
     []
   );
@@ -2167,6 +2228,7 @@ export default function App() {
                 <Suspense fallback={<ViewSuspenseFallback />}>
                   <LazyGamesHubView
                     key={activeTab === 'quiz' ? 'games-quiz-open' : 'games-hub'}
+                    allCards={cards}
                     defaultOpenQuiz={activeTab === 'quiz'}
                     question={quizQuestion}
                     selectedOptionId={quizSelectedOptionId}
@@ -2182,6 +2244,7 @@ export default function App() {
                     onSelectOption={handleSelectQuizOption}
                     onNextQuestion={handleNextQuizQuestion}
                     onResetScore={handleResetQuizScore}
+                    onCompleteMiniGame={handleMiniGameCompleted}
                     onOpenRankingModal={() => setRankingModalOpen(true)}
                     onShareQuizAchievement={(featuredCard) =>
                       setSharePayload({

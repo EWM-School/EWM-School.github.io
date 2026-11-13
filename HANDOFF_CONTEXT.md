@@ -38,6 +38,12 @@ npm install --legacy-peer-deps
 ```
 *(Copie apenas o seu arquivo local `.env` contendo `GEMINI_API_KEY` para a raiz do projeto — o `.env` permanece 100% ignorado pelo `.gitignore` e nunca sobe para o GitHub).*
 
+### Transição em 1 Comando no PC de Casa (Fora do OneDrive → `C:\Projetos`)
+1. Abra o **PowerShell** no PC de Casa (autentique `gh auth login --web -p https` + `gh auth setup-git` caso ainda não esteja logado).
+2. Execute em 1 comando a partir de qualquer pasta (preserva automaticamente seu `.env` com `GEMINI_API_KEY`, clona/atualiza `feat/ewm-v2` em `C:\Projetos\EWM-School.github.io` e roda `npm install --legacy-peer-deps`):  
+   `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-home-pc.ps1` *(ou, se ainda não tiver a pasta local: `New-Item -ItemType Directory -Force C:\Projetos | Out-Null; git clone -b feat/ewm-v2 https://github.com/EWM-School/EWM-School.github.io.git C:\Projetos\EWM-School.github.io; powershell -ExecutionPolicy Bypass -File C:\Projetos\EWM-School.github.io\scripts\setup-home-pc.ps1`)*.
+3. Abra `C:\Projetos\EWM-School.github.io` no Antigravity e rode `npm run dev` — o Auto-Sync já estará ativo.
+
 ### Sincronização Diária Automática (Zero Atrito)
 1. **Auto-Pull Inteligente ao Iniciar (`npm run dev`):**
    O hook `predev` executa automaticamente `node scripts/auto-sync-pull.mjs` antes de subir o servidor (`tsx server.ts`):

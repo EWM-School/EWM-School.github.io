@@ -125,7 +125,7 @@ service cloud.firestore {
         ]) &&
         data.keys().hasOnly([
           'ownerId', 'studyScope', 'selectedCardIds', 'connectedDeckIds',
-          'activeRound', 'preferredAccent', 'createdAt', 'updatedAt'
+          'activeRound', 'preferredAccent', 'survivalBestStreak', 'createdAt', 'updatedAt'
         ]) &&
         data.ownerId == userId &&
         data.ownerId == request.auth.uid &&
@@ -141,6 +141,11 @@ service cloud.firestore {
           data.preferredAccent.size() >= 2 &&
           data.preferredAccent.size() <= 4 &&
           data.preferredAccent in ['us', 'uk']
+        )) &&
+        (!('survivalBestStreak' in data) || (
+          data.survivalBestStreak is int &&
+          data.survivalBestStreak >= 0 &&
+          data.survivalBestStreak <= 100000
         )) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
@@ -289,7 +294,7 @@ service cloud.firestore {
           (
             incoming().diff(existing()).affectedKeys().hasOnly([
               'studyScope', 'selectedCardIds', 'connectedDeckIds',
-              'activeRound', 'preferredAccent', 'updatedAt'
+              'activeRound', 'preferredAccent', 'survivalBestStreak', 'updatedAt'
             ]) ||
             isAdmin()
           )

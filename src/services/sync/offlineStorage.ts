@@ -46,7 +46,8 @@ export type SyncQueueAction =
   | 'QUIZ_SCORE_UPDATE'
   | 'LEADERBOARD_SCORE_UPSERT'
   | 'LINGUISTIC_CACHE_UPSERT'
-  | 'CURATED_GLOBAL_CARD_UPSERT';
+  | 'CURATED_GLOBAL_CARD_UPSERT'
+  | 'SURVIVAL_STREAK_SYNC';
 
 export interface CachedLinguisticRecord {
   cacheKey: string;
@@ -122,6 +123,10 @@ export type SyncQueuePayload =
   | {
       type: 'CURATED_GLOBAL_CARD_UPSERT';
       card: Flashcard;
+    }
+  | {
+      type: 'SURVIVAL_STREAK_SYNC';
+      bestStreak: number;
     };
 
 export interface SyncQueueItem {
@@ -789,6 +794,13 @@ export async function saveStudyStatsLocal(stats: UserStudyStats): Promise<void> 
       data: stats,
       updatedAt: new Date().toISOString(),
     });
+    if (typeof stats.survivalBestStreak === 'number' && stats.survivalBestStreak > 0) {
+      await db.put('kv_meta', {
+        key: 'ewm_v6_survival_best_streak',
+        data: { bestStreak: Math.floor(stats.survivalBestStreak) },
+        updatedAt: new Date().toISOString(),
+      });
+    }
   } catch {
     // ignore
   }

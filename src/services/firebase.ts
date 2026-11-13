@@ -236,6 +236,7 @@ export interface CloudWorkspaceSnapshot {
   connectedDeckIds: string[];
   activeRound: number;
   preferredAccent?: EnglishAccent;
+  survivalBestStreak?: number;
   updatedAt?: string;
 }
 
@@ -416,9 +417,42 @@ export async function ensureUserWorkspaceAndMigrate(
           : existingData?.preferredAccent === 'us'
           ? 'us'
           : undefined,
+      survivalBestStreak:
+        typeof existingData?.survivalBestStreak === 'number'
+          ? Math.max(0, Math.floor(existingData.survivalBestStreak))
+          : undefined,
       updatedAt: extractTimestampIso(existingData?.updatedAt),
     },
   };
+}
+
+export async function syncSurvivalBestStreakInCloud(
+  uid: string,
+  bestStreak: number
+): Promise<void> {
+  const cleanStreak = Math.max(0, Math.min(100000, Math.floor(bestStreak || 0)));
+  if (!isValidFirestoreId(uid) || cleanStreak <= 0) return;
+  const wsPath = `users/${uid}`;
+  const wsRef = doc(db, 'users', uid);
+
+  try {
+    const snap = await getDoc(wsRef);
+    if (!snap.exists()) return;
+    const prev =
+      typeof snap.data()?.survivalBestStreak === 'number'
+        ? Math.max(0, Math.floor(snap.data().survivalBestStreak))
+        : 0;
+    if (cleanStreak <= prev) return;
+    await updateDoc(wsRef, {
+      survivalBestStreak: cleanStreak,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    if (isPermissionDeniedError(error) || isLikelyNetworkOfflineError(error)) {
+      return;
+    }
+    handleFirestoreError(error, OperationType.UPDATE, wsPath);
+  }
 }
 
 export async function updateUserWorkspaceSettings(
@@ -1141,6 +1175,10 @@ export function subscribeUserCloudData(
             ? 'uk'
             : data.preferredAccent === 'us'
             ? 'us'
+            : undefined,
+        survivalBestStreak:
+          typeof data.survivalBestStreak === 'number'
+            ? Math.max(0, Math.floor(data.survivalBestStreak))
             : undefined,
         updatedAt: extractTimestampIso(data.updatedAt),
       });

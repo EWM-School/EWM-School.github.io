@@ -204,11 +204,16 @@ function evaluateRule(params: {
             'ownerId', 'studyScope', 'selectedCardIds', 'connectedDeckIds',
             'activeRound', 'createdAt', 'updatedAt',
           ],
-          ['preferredAccent']
+          ['preferredAccent', 'survivalBestStreak']
         ) &&
         (!('preferredAccent' in incomingData) ||
           incomingData.preferredAccent === 'us' ||
           incomingData.preferredAccent === 'uk') &&
+        (!('survivalBestStreak' in incomingData) ||
+          (typeof incomingData.survivalBestStreak === 'number' &&
+            Number.isInteger(incomingData.survivalBestStreak) &&
+            incomingData.survivalBestStreak >= 0 &&
+            incomingData.survivalBestStreak <= 100000)) &&
         incomingData.ownerId === docId &&
         incomingData.ownerId === auth.uid &&
         incomingData.ownerId === existingData.ownerId &&
@@ -216,7 +221,7 @@ function evaluateRule(params: {
         incomingData.updatedAt === requestTime &&
         (affectedKeysOnly(incomingData, existingData, [
           'studyScope', 'selectedCardIds', 'connectedDeckIds',
-          'activeRound', 'preferredAccent', 'updatedAt',
+          'activeRound', 'preferredAccent', 'survivalBestStreak', 'updatedAt',
         ]) ||
           isAdmin(auth, db));
       return allow(valid);

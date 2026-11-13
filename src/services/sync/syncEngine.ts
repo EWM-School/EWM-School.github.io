@@ -3,6 +3,7 @@ import {
   deleteUserDeckFromCloud,
   publishCuratedSchoolCardInCloud,
   saveCardMastery,
+  syncSurvivalBestStreakInCloud,
   updateUserWorkspaceSettings,
   upsertCollectiveLinguisticCacheInCloud,
   upsertCustomCard,
@@ -250,6 +251,10 @@ async function executeQueueItemOnCloud(uid: string, item: SyncQueueItem): Promis
 
     case 'CURATED_GLOBAL_CARD_UPSERT':
       await publishCuratedSchoolCardInCloud(uid, payload.card);
+      return;
+
+    case 'SURVIVAL_STREAK_SYNC':
+      await syncSurvivalBestStreakInCloud(uid, payload.bestStreak);
       return;
   }
 }
@@ -683,4 +688,25 @@ export async function recordCuratedGlobalCardOptimistic(card: Flashcard): Promis
   }
 
   return stamped;
+}
+
+export async function recordSurvivalBestStreakOptimistic(bestStreak: number): Promise<void> {
+  const cleanStreak = Math.max(0, Math.floor(bestStreak || 0));
+  if (cleanStreak <= 0) return;
+
+  if (activeUid && cloudAuthorized) {
+    await upsertSyncQueueEvent({
+      dedupeKey: 'profile:survivalBestStreak',
+      action: 'SURVIVAL_STREAK_SYNC',
+      payload: {
+        type: 'SURVIVAL_STREAK_SYNC',
+        bestStreak: cleanStreak,
+      },
+      ownerUid: activeUid,
+    });
+    await refreshPendingCache();
+    if (getNetworkSnapshot().connected) {
+      scheduleFlush(400);
+    }
+  }
 }

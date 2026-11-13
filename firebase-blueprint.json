@@ -198,6 +198,10 @@
           "description": "Preferred default English voice and phonetic accent ('us' or 'uk').",
           "enum": ["us", "uk"]
         },
+        "survivalBestStreak": {
+          "type": "integer",
+          "description": "All-time personal record in Survival Mode Mini-Game."
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",
