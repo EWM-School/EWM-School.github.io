@@ -66,5 +66,7 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>O EWM usa o microfone para gravar e avaliar sua pronúncia em inglês no Speaking Lab e nos Flashcards.</string>
 </dict>
 </plist>

@@ -36,6 +36,11 @@ import {
   type SpeechRecognitionController,
 } from '../services/platform/speechService';
 import { triggerTap } from '../services/platform/hapticsService';
+import {
+  CardPronunciationDrawer,
+  type CardPronunciationSession,
+} from './CardPronunciationDrawer';
+import type { PronunciationEvaluationResult } from '../utils/pronunciationEngine';
 
 interface CompactCardRowProps {
   card: Flashcard;
@@ -44,6 +49,7 @@ interface CompactCardRowProps {
   onToggleCardSelection: (cardId: string) => void;
   onEditCard: (card: Flashcard) => void;
   onDeleteCard: (card: Flashcard) => void;
+  onOpenPronunciation: (session: CardPronunciationSession) => void;
 }
 
 const CompactCardRow = memo(function CompactCardRow({
@@ -53,6 +59,7 @@ const CompactCardRow = memo(function CompactCardRow({
   onToggleCardSelection,
   onEditCard,
   onDeleteCard,
+  onOpenPronunciation,
 }: CompactCardRowProps) {
   const phonetics = getCardPhonetics(card);
 
@@ -122,13 +129,29 @@ const CompactCardRow = memo(function CompactCardRow({
         </button>
         <button
           type="button"
-          onClick={() => void toggleSpeakEnglishText(card.term, 'uk')}
+          onClick={(e) => {
+            e.stopPropagation();
+            void toggleSpeakEnglishText(card.term, 'uk');
+          }}
           title="Ouvir em Inglês Britânico (UK)"
           aria-label={`Ouvir ${card.term} em inglês britânico`}
           className="min-h-[40px] lg:min-h-[30px] inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#EDF1F5] hover:bg-[#DFE6EE] dark:bg-[#1E2630] dark:hover:bg-[#26313E] text-[11px] font-semibold text-[#243B53] dark:text-[#9CC3E6] transition-colors cursor-pointer whitespace-nowrap shrink-0"
         >
           <Volume2 className="w-3 h-3" />
           <span>UK</span>
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            void triggerTap();
+            onOpenPronunciation({ card, initialTarget: 'term' });
+          }}
+          title="Treinar pronúncia (🎤)"
+          aria-label={`Treinar pronúncia de ${card.term}`}
+          className="min-h-[40px] lg:min-h-[30px] inline-flex items-center justify-center px-2.5 py-1 rounded-lg bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[11px] font-semibold text-[#225851] dark:text-[#86CEC2] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+        >
+          <Mic className="w-3 h-3" />
         </button>
         <button
           type="button"
@@ -162,6 +185,7 @@ interface GridCardItemProps {
   onUpdateCardSubtopic: (cardId: string, subtopic: SubtopicKey) => void;
   onEditCard: (card: Flashcard) => void;
   onDeleteCard: (card: Flashcard) => void;
+  onOpenPronunciation: (session: CardPronunciationSession) => void;
 }
 
 const GridCardItem = memo(function GridCardItem({
@@ -173,6 +197,7 @@ const GridCardItem = memo(function GridCardItem({
   onUpdateCardSubtopic,
   onEditCard,
   onDeleteCard,
+  onOpenPronunciation,
 }: GridCardItemProps) {
   const sec = getCardSecondExample(card);
   const phonetics = getCardPhonetics(card);
@@ -286,13 +311,29 @@ const GridCardItem = memo(function GridCardItem({
               </button>
               <button
                 type="button"
-                onClick={() => void toggleSpeakEnglishText(card.term, 'uk')}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void toggleSpeakEnglishText(card.term, 'uk');
+                }}
                 title="Ouvir em Inglês Britânico (UK)"
                 aria-label={`Ouvir ${card.term} em inglês britânico`}
                 className="min-h-[38px] lg:min-h-[28px] inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#EDF1F5] hover:bg-[#DFE6EE] dark:bg-[#1E2630] dark:hover:bg-[#26313E] text-[11px] font-semibold text-[#243B53] dark:text-[#9CC3E6] transition-colors cursor-pointer whitespace-nowrap shrink-0"
               >
                 <Volume2 className="w-3 h-3" />
                 <span>UK</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void triggerTap();
+                  onOpenPronunciation({ card, initialTarget: 'term' });
+                }}
+                title="Treinar pronúncia (🎤)"
+                aria-label={`Treinar pronúncia de ${card.term}`}
+                className="min-h-[38px] lg:min-h-[28px] inline-flex items-center justify-center px-2 py-1 rounded-lg bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[11px] font-semibold text-[#225851] dark:text-[#86CEC2] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <Mic className="w-3 h-3" />
               </button>
             </div>
           </div>
@@ -395,6 +436,10 @@ interface ListViewProps {
   onDeleteCard: (card: Flashcard) => void;
   onGoToStudy: () => void;
   onNotify: (msg: string) => void;
+  onPronunciationEvaluated?: (
+    result: PronunciationEvaluationResult,
+    targetText: string
+  ) => { awardedXp: number; alreadyRewardedToday: boolean } | void;
 }
 
 export const ListView = memo(function ListView({
@@ -416,6 +461,7 @@ export const ListView = memo(function ListView({
   onDeleteCard,
   onGoToStudy,
   onNotify,
+  onPronunciationEvaluated,
 }: ListViewProps) {
   // O(1) lookup map for selection order instead of O(N) indexOf inside every card row
   const selectionOrderMap = useMemo(() => {
@@ -428,6 +474,8 @@ export const ListView = memo(function ListView({
   }, [selectedStudyIds]);
 
   const [isListening, setIsListening] = useState(false);
+  const [pronunciationSession, setPronunciationSession] =
+    useState<CardPronunciationSession | null>(null);
   const recognitionRef = useRef<SpeechRecognitionController | null>(null);
 
   useEffect(() => {
@@ -721,6 +769,7 @@ export const ListView = memo(function ListView({
               onToggleCardSelection={onToggleCardSelection}
               onEditCard={onEditCard}
               onDeleteCard={onDeleteCard}
+              onOpenPronunciation={setPronunciationSession}
             />
           ))}
         </div>
@@ -737,9 +786,19 @@ export const ListView = memo(function ListView({
               onUpdateCardSubtopic={onUpdateCardSubtopic}
               onEditCard={onEditCard}
               onDeleteCard={onDeleteCard}
+              onOpenPronunciation={setPronunciationSession}
             />
           ))}
         </div>
+      )}
+
+      {pronunciationSession && (
+        <CardPronunciationDrawer
+          session={pronunciationSession}
+          variant="sheet"
+          onClose={() => setPronunciationSession(null)}
+          onPronunciationEvaluated={onPronunciationEvaluated}
+        />
       )}
     </div>
   );

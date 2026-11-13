@@ -30,6 +30,17 @@ import {
   type GrammarCheckPayload,
   type LinguisticEngineResult,
 } from './src/utils/linguisticNormalizer.js';
+import {
+  buildNonClearPronunciationResult,
+  detectDigitalSilenceInAudioBytes,
+  enforceDeterministicPronunciationInvariants,
+  normalizeAudioMimeType,
+  stripBase64DataUrlPrefix,
+  tokenizeTargetWords,
+  type PronunciationAccent,
+  type PronunciationMode,
+  type RawPronunciationPayload,
+} from './src/utils/pronunciationEngine.js';
 
 dotenv.config();
 
@@ -39,6 +50,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = Number(process.env.PORT) || 3000;
 
+// Dedicated 6MB body parser exclusively for short multimodal audio pronunciation clips
+app.use('/api/gemini/evaluate-pronunciation', express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '100kb' }));
 
 // Security headers & Web App Manifest MIME compliance
@@ -1331,6 +1344,331 @@ app.post('/api/gemini/tts', async (req, res) => {
     reason: 'GEMINI_TTS_ERROR',
     error: errMsg || 'Falha temporária na síntese neural Gemini TTS.',
   });
+});
+
+// ---------------------------------------------------------------------------
+// PARTE 1 (CAMADA 3) — DETERMINISTIC MULTIMODAL PHONETIC EVALUATION ENGINE
+// ---------------------------------------------------------------------------
+const BLIND_ACOUSTIC_GATE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    audioQualityStatus: {
+      type: Type.STRING,
+      enum: ['CLEAR', 'NO_SPEECH_DETECTED', 'TOO_NOISY_OR_LOW', 'WRONG_LANGUAGE'],
+      description:
+        'Avaliação cega e estrita da presença de voz humana inteligível em inglês: use NO_SPEECH_DETECTED para silêncio, tons sintéticos (bipes/senoides), cliques ou respiração sem fala; TOO_NOISY_OR_LOW se estiver inaudível; WRONG_LANGUAGE se falar em português ou outro idioma; CLEAR somente se houver fala humana inteligível em inglês.',
+    },
+    heardTranscript: {
+      type: Type.STRING,
+      description:
+        'Transcrição fonética crua e fiel do que foi efetivamente falado no áudio (sem corrigir gramática nem adivinhar palavras). Ex.: se o falante disse "She sink it workee today", transcreva exatamente "She sink it workee today". Se não houver fala humana clara, retorne "".',
+    },
+  },
+  required: ['audioQualityStatus', 'heardTranscript'],
+  propertyOrdering: ['audioQualityStatus', 'heardTranscript'],
+};
+
+const PRONUNCIATION_EVALUATION_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    audioQualityStatus: {
+      type: Type.STRING,
+      enum: ['CLEAR', 'NO_SPEECH_DETECTED', 'TOO_NOISY_OR_LOW', 'WRONG_LANGUAGE'],
+      description:
+        'PRIMEIRO CAMPO OBRIGATÓRIO: Avalie estritamente a qualidade acústica real do áudio enviado. Use NO_SPEECH_DETECTED se houver silêncio/respiração vazia, TOO_NOISY_OR_LOW se estiver inaudível/com ruído excessivo, WRONG_LANGUAGE se falar em português ou outro idioma que não seja inglês, ou CLEAR se houver fala audível em inglês.',
+    },
+    heardTranscript: {
+      type: Type.STRING,
+      description:
+        'Transcrição fonética fiel do que o aluno REALMENTE falou no áudio, SEM autocorrigir palavras erradas, omitidas ou trocadas pelo contexto da frase-alvo. Se não houver fala clara, retorne string vazia "".',
+    },
+    wordBreakdown: {
+      type: Type.ARRAY,
+      description:
+        'Avaliação alinhada palavra por palavra para CADA palavra da frase-alvo (targetText). Se audioQualityStatus !== "CLEAR", retorne array vazio [].',
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          word: {
+            type: Type.STRING,
+            description: 'A palavra exata correspondente na frase-alvo (targetText).',
+          },
+          status: {
+            type: Type.STRING,
+            enum: ['EXACT', 'CLOSE_NEEDS_POLISH', 'MISPRONOUNCED_OR_MISSING'],
+            description:
+              'EXACT: pronúncia limpa e natural no sotaque escolhido; CLOSE_NEEDS_POLISH: compreensível, mas com sotaque/vogal/ritmo a lapidar; MISPRONOUNCED_OR_MISSING: palavra omitida, trocada ou com erro fonético claro (ex.: epêntese "work-ee", "-ed" falado "-êdi", TH trocado por T/D/S/F, letra muda pronunciada).',
+          },
+          phoneticCuePtBr: {
+            type: Type.STRING,
+            description:
+              'Guia intuitivo e legível para leigos brasileiros de como soar a palavra (ex.: "wârkt /wɜːrkt/ — T seco no final, sem som de i"), usando IPA apenas como apoio discreto.',
+          },
+          tipPtBr: {
+            type: Type.STRING,
+            description:
+              'Dica cirúrgica de 1 linha clara em português do Brasil explicando posição de língua/boca/ar para corrigir (ou elogio curto se EXACT).',
+          },
+        },
+        required: ['word', 'status', 'phoneticCuePtBr', 'tipPtBr'],
+        propertyOrdering: ['word', 'status', 'phoneticCuePtBr', 'tipPtBr'],
+      },
+    },
+    overallScore: {
+      type: Type.INTEGER,
+      description:
+        'Nota acústica global de 0 a 100. Se audioQualityStatus !== "CLEAR", retorne 0. Se houver qualquer palavra essencial com MISPRONOUNCED_OR_MISSING, NUNCA ultrapasse 84.',
+    },
+    verdict: {
+      type: Type.STRING,
+      enum: ['NATIVE_LIKE', 'UNDERSTANDABLE_POLISH', 'NEEDS_PRACTICE'],
+      description:
+        'Veredito pedagógico honesto: NATIVE_LIKE (85-100, sem erros fonéticos), UNDERSTANDABLE_POLISH (60-84, compreensível com ajustes pontuais) ou NEEDS_PRACTICE (0-59 ou sem fala clara).',
+    },
+    coachSummaryPtBr: {
+      type: Type.STRING,
+      description:
+        '1 frase direta, encorajadora e construtiva em português do Brasil resumindo o ponto principal da pronúncia.',
+    },
+  },
+  required: [
+    'audioQualityStatus',
+    'heardTranscript',
+    'wordBreakdown',
+    'overallScore',
+    'verdict',
+    'coachSummaryPtBr',
+  ],
+  propertyOrdering: [
+    'audioQualityStatus',
+    'heardTranscript',
+    'wordBreakdown',
+    'overallScore',
+    'verdict',
+    'coachSummaryPtBr',
+  ],
+};
+
+app.post('/api/gemini/evaluate-pronunciation', async (req, res) => {
+  const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
+  if (!checkRateLimit(clientIp)) {
+    return res.status(429).json({
+      success: false,
+      reason: 'RATE_LIMITED',
+      error: 'Muitas avaliações acústicas seguidas. Aguarde alguns segundos e tente novamente.',
+    });
+  }
+
+  const targetText = sanitizeUserInput(req.body?.targetText, 280);
+  const rawAccent = String(req.body?.accent || 'en-US').trim();
+  const accent: PronunciationAccent =
+    rawAccent === 'en-GB' || rawAccent.toLowerCase() === 'uk' ? 'en-GB' : 'en-US';
+  const mode: PronunciationMode =
+    req.body?.mode === 'card-quick' ? 'card-quick' : 'lab-detailed';
+
+  if (!targetText || tokenizeTargetWords(targetText).length === 0) {
+    return res.status(400).json({
+      success: false,
+      reason: 'INVALID_TARGET_TEXT',
+      error: 'Frase-alvo inválida para avaliação de pronúncia.',
+    });
+  }
+
+  const cleanMimeType = normalizeAudioMimeType(req.body?.mimeType);
+  if (!cleanMimeType) {
+    return res.status(400).json({
+      success: false,
+      reason: 'UNSUPPORTED_AUDIO_MIME',
+      error: 'Formato de áudio não suportado para análise acústica.',
+    });
+  }
+
+  const cleanBase64 = stripBase64DataUrlPrefix(req.body?.audioBase64);
+  if (!cleanBase64) {
+    const silentEval = buildNonClearPronunciationResult('NO_SPEECH_DETECTED', accent, mode);
+    return res.json({
+      success: true,
+      evaluation: silentEval,
+    });
+  }
+
+  let audioBytes: Uint8Array;
+  try {
+    audioBytes = new Uint8Array(Buffer.from(cleanBase64, 'base64'));
+  } catch {
+    return res.status(400).json({
+      success: false,
+      reason: 'INVALID_AUDIO_BASE64',
+      error: 'Buffer de áudio corrompido ou inválido.',
+    });
+  }
+
+  // Server-side 0ms acoustic guard against empty/tiny/silent buffers (zero hallucination guarantee)
+  const silenceCheck = detectDigitalSilenceInAudioBytes(audioBytes, cleanMimeType);
+  if (silenceCheck.isSilentOrTooTiny) {
+    const silentEval = buildNonClearPronunciationResult('NO_SPEECH_DETECTED', accent, mode);
+    return res.json({
+      success: true,
+      evaluation: silentEval,
+    });
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+    return res.status(503).json({
+      success: false,
+      reason: 'NO_API_KEY',
+      error: 'Chave Gemini não configurada no servidor para avaliação acústica.',
+    });
+  }
+
+  const targetWordsList = tokenizeTargetWords(targetText);
+  const accentProfileDescription =
+    accent === 'en-GB'
+      ? 'Inglês Britânico (en-GB / Received Pronunciation — não-rótico no final de sílaba, T articulado limpo, vogais britânicas em bath/lot/thought)'
+      : 'Inglês Americano (en-US / General American — R retroflexo audível, flap T natural entre vogais como em "water/better", vogal /æ/ aberta)';
+
+  try {
+    // PASS 1 — BLIND ACOUSTIC ANTI-HALLUCINATION GATE (ZERO knowledge of targetText!)
+    // Because `targetText` is completely absent from Pass 1, it is information-theoretically
+    // impossible for the model to hallucinate `targetText` on tones, noise, silence, or swapped words.
+    const blindGateResp = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                mimeType: cleanMimeType,
+                data: cleanBase64,
+              },
+            },
+            {
+              text: [
+                'Escute estritamente este clipe de áudio sem adivinhar contexto.',
+                '1. Se houver apenas silêncio, tom puro/sinal sintético (bipe/senoide), sopro ou ruído sem fala humana articulada, retorne audioQualityStatus = "NO_SPEECH_DETECTED" e heardTranscript = "".',
+                '2. Se houver tentativa de fala mas inaudível ou coberta por ruído alto, retorne "TOO_NOISY_OR_LOW".',
+                '3. Se a fala estiver em português ou outro idioma diferente do inglês, retorne "WRONG_LANGUAGE".',
+                '4. Somente se houver fala humana audível tentando falar inglês, retorne "CLEAR" e transcreva em heardTranscript exatamente os sons/palavras falados, SEM autocorrigir erros fonéticos (ex.: mantenha "sink", "workee", palavras omitidas ou trocadas).',
+              ].join('\n'),
+            },
+          ],
+        },
+      ],
+      config: {
+        temperature: 0.0,
+        responseMimeType: 'application/json',
+        responseSchema: BLIND_ACOUSTIC_GATE_SCHEMA,
+      },
+    });
+
+    const blindParsed = extractJsonPayload<{
+      audioQualityStatus?: string;
+      heardTranscript?: string;
+    }>(blindGateResp.text || '');
+
+    const blindStatus = String(blindParsed?.audioQualityStatus || 'NO_SPEECH_DETECTED')
+      .trim()
+      .toUpperCase();
+    const blindTranscript = String(blindParsed?.heardTranscript || '').trim();
+
+    if (blindStatus !== 'CLEAR' || !blindTranscript) {
+      const nonClearStatus =
+        blindStatus === 'TOO_NOISY_OR_LOW' || blindStatus === 'WRONG_LANGUAGE'
+          ? blindStatus
+          : 'NO_SPEECH_DETECTED';
+      return res.json({
+        success: true,
+        evaluation: buildNonClearPronunciationResult(
+          nonClearStatus,
+          accent,
+          mode,
+          blindTranscript
+        ),
+      });
+    }
+
+    // PASS 2 — DETAILED BRAZILIAN-LEARNER PHONETIC INSPECTION ON RAW AUDIO + UNBIASED TRANSCRIPT
+    const systemInstruction = [
+      'Você é um Fonoaudiólogo Acústico e Professor Sênior de Pronúncia de Inglês especializado em alunos brasileiros (EWM Keep practicing).',
+      'DIRETRIZ INEGOCIÁVEL: Escute DIRETAMENTE o sinal acústico real do áudio anexado e respeite a transcrição acústica cega (blindHeardTranscript) capturada sem viés.',
+      'PROIBIDO autocorrigir palavras omitidas ou trocadas! Se uma palavra de targetText não aparece em blindHeardTranscript ou foi pronunciada como outra palavra (ex.: "sink" em vez de "thinks", "workee" em vez de "worked", palavra pulada), marque OBRIGATORIAMENTE status = "MISPRONOUNCED_OR_MISSING".',
+      'Inspecione rigorosamente os padrões fonéticos de falantes brasileiros:',
+      '  a) Vogal epentética /i/ após consoantes mudas/oclusivas finais (ex.: falar "work-ee", "stop-ee", "Facebook-ee", "hot-ee", "back-ee");',
+      '  b) Sons de TH desvozeado /θ/ (think, three, worth) e vozeado /ð/ (this, brother, the, that) trocados por /t/, /d/, /s/, /z/ ou /f/;',
+      '  c) Terminações do passado regular -ed (/t/, /d/ vs /ɪd/) pronunciadas incorretamente com sílaba extra "-êdi" (ex.: "worked" deve soar /wɜːrkt/ com T seco, NUNCA "uórkêdi");',
+      '  d) Contraste de vogais críticas (/ɪ/ curto vs /iː/ longo como live/leave, ship/sheep, it/eat; /æ/ vs /ɛ/ como bad/bed), L velarizado final (dark L em call, feel, well — língua tocando atrás dos dentes superiores, não som puro de U "cóu/fíu") e letras mudas (subtle, debt, doubt, muscle, listen, honest);',
+      '  e) Sílaba tônica (word stress), linking e ritmo natural compatíveis com o sotaque selecionado.',
+      'CLAREZA PEDAGÓGICA LEIGA: Em phoneticCuePtBr, escreva um guia intuitivo que qualquer brasileiro entenda de imediato (ex.: "wârkt (/wɜːrkt/ · T seco, sem som de i)"), evitando jargão acadêmico intimidador. Em tipPtBr, dê 1 linha prática e cirúrgica de posição de boca/língua em português.',
+    ].join('\n');
+
+    const userPrompt = [
+      `Sotaque de referência selecionado pelo aluno: ${accent} (${accentProfileDescription})`,
+      `Modo de feedback: ${mode === 'card-quick' ? 'Micro-treino rápido de Flashcard (seja conciso e cirúrgico)' : 'Laboratório completo Speaking Lab (diagnóstico fonético detalhado palavra por palavra)'}`,
+      `Transcrição acústica cega ouvida sem viés (blindHeardTranscript): "${blindTranscript}"`,
+      `Frase-alvo esperada (targetText): "${targetText}"`,
+      `Lista ordenada de palavras de targetText (${targetWordsList.length} palavras): ${JSON.stringify(targetWordsList)}`,
+      'Analise acusticamente cada palavra do áudio contra targetText e retorne estritamente o JSON validado.',
+    ].join('\n');
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                mimeType: cleanMimeType,
+                data: cleanBase64,
+              },
+            },
+            {
+              text: userPrompt,
+            },
+          ],
+        },
+      ],
+      config: {
+        temperature: 0.0,
+        systemInstruction,
+        responseMimeType: 'application/json',
+        responseSchema: PRONUNCIATION_EVALUATION_SCHEMA,
+      },
+    });
+
+    const parsed = extractJsonPayload<RawPronunciationPayload>(response.text || '');
+    if (!parsed) {
+      throw new Error('Resposta JSON vazia na avaliação acústica.');
+    }
+
+    // Anchor heardTranscript to the unbiased Pass 1 transcript if model left it blank
+    if (!parsed.heardTranscript || !parsed.heardTranscript.trim()) {
+      parsed.heardTranscript = blindTranscript;
+    }
+
+    const validatedEvaluation = enforceDeterministicPronunciationInvariants(
+      parsed,
+      targetText,
+      accent,
+      mode
+    );
+
+    return res.json({
+      success: true,
+      evaluation: validatedEvaluation,
+    });
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err || '');
+    return res.status(502).json({
+      success: false,
+      reason: 'ACOUSTIC_EVALUATION_FAILED',
+      error:
+        errMsg ||
+        'Não foi possível concluir a análise acústica neste momento. Verifique sua conexão e tente novamente.',
+    });
+  }
 });
 
 // Mount Vite in dev mode or serve static files in production, injecting absolute HTTPS OpenGraph URLs

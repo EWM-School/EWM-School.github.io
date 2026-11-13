@@ -37,7 +37,12 @@ import {
   SentenceAudioButtons,
 } from './CardAudioControls';
 import { DailyGoalProgressBar } from './DailyGoalProgressBar';
+import {
+  CardPronunciationDrawer,
+  type CardPronunciationSession,
+} from './CardPronunciationDrawer';
 import type { UserStudyStats } from '../utils/studyMetrics';
+import type { PronunciationEvaluationResult } from '../utils/pronunciationEngine';
 
 interface StudyViewProps {
   cards: Flashcard[];
@@ -65,6 +70,10 @@ interface StudyViewProps {
   onShareCard?: (card: Flashcard) => void;
   onToggleFocusMode: () => void;
   onResetFilters: () => void;
+  onPronunciationEvaluated?: (
+    result: PronunciationEvaluationResult,
+    targetText: string
+  ) => { awardedXp: number; alreadyRewardedToday: boolean } | void;
 }
 
 export const StudyView = memo(function StudyView({
@@ -93,9 +102,12 @@ export const StudyView = memo(function StudyView({
   onShareCard,
   onToggleFocusMode,
   onResetFilters,
+  onPronunciationEvaluated,
 }: StudyViewProps) {
   const [activeAudio, setActiveAudio] = useState<ActiveAudioPlayback | null>(null);
   const [speechSpeed, setSpeechSpeed] = useState<SpeechSpeed>(() => getSpeechSpeed());
+  const [pronunciationSession, setPronunciationSession] =
+    useState<CardPronunciationSession | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const swipeConsumedRef = useRef(false);
 
@@ -115,6 +127,7 @@ export const StudyView = memo(function StudyView({
 
   useEffect(() => {
     stopCurrentAudio();
+    setPronunciationSession(null);
   }, [currentCardId]);
 
   const secondExample = currentCard ? getCardSecondExample(currentCard) : { en: '', pt: '' };
@@ -440,6 +453,16 @@ export const StudyView = memo(function StudyView({
                     phoneticUk={phonetics.uk}
                     activeAudio={activeAudio}
                     speed={speechSpeed}
+                    isPronunciationOpen={Boolean(
+                      pronunciationSession && pronunciationSession.card.id === currentCard.id
+                    )}
+                    onOpenPronunciation={() =>
+                      setPronunciationSession((prev) =>
+                        prev && prev.card.id === currentCard.id && prev.initialTarget === 'term'
+                          ? null
+                          : { card: currentCard, initialTarget: 'term' }
+                      )
+                    }
                   />
                 </div>
 
@@ -460,6 +483,14 @@ export const StudyView = memo(function StudyView({
                       indexLabel="1"
                       activeAudio={activeAudio}
                       speed={speechSpeed}
+                      onOpenPronunciation={() =>
+                        setPronunciationSession({
+                          card: currentCard,
+                          initialTarget: 'example',
+                          overrideExampleEn: currentCard.exampleEn,
+                          overrideExamplePt: currentCard.examplePt,
+                        })
+                      }
                     />
                   </div>
 
@@ -475,6 +506,14 @@ export const StudyView = memo(function StudyView({
                       indexLabel="2"
                       activeAudio={activeAudio}
                       speed={speechSpeed}
+                      onOpenPronunciation={() =>
+                        setPronunciationSession({
+                          card: currentCard,
+                          initialTarget: 'example',
+                          overrideExampleEn: secondExample.en,
+                          overrideExamplePt: secondExample.pt,
+                        })
+                      }
                     />
                   </div>
                 </div>
@@ -512,6 +551,16 @@ export const StudyView = memo(function StudyView({
                       term={currentCard.term}
                       activeAudio={activeAudio}
                       speed={speechSpeed}
+                      isPronunciationOpen={Boolean(
+                        pronunciationSession && pronunciationSession.card.id === currentCard.id
+                      )}
+                      onOpenPronunciation={() =>
+                        setPronunciationSession((prev) =>
+                          prev && prev.card.id === currentCard.id && prev.initialTarget === 'term'
+                            ? null
+                            : { card: currentCard, initialTarget: 'term' }
+                        )
+                      }
                     />
                   </div>
 
@@ -565,6 +614,14 @@ export const StudyView = memo(function StudyView({
                           compact
                           activeAudio={activeAudio}
                           speed={speechSpeed}
+                          onOpenPronunciation={() =>
+                            setPronunciationSession({
+                              card: currentCard,
+                              initialTarget: 'example',
+                              overrideExampleEn: currentCard.exampleEn,
+                              overrideExamplePt: currentCard.examplePt,
+                            })
+                          }
                         />
                       </div>
                       <p className="font-semibold text-[#1C1B18] dark:text-[#EBE7DE]">
@@ -583,6 +640,14 @@ export const StudyView = memo(function StudyView({
                           compact
                           activeAudio={activeAudio}
                           speed={speechSpeed}
+                          onOpenPronunciation={() =>
+                            setPronunciationSession({
+                              card: currentCard,
+                              initialTarget: 'example',
+                              overrideExampleEn: secondExample.en,
+                              overrideExamplePt: secondExample.pt,
+                            })
+                          }
                         />
                       </div>
                       <p className="font-semibold text-[#1C1B18] dark:text-[#EBE7DE]">
@@ -650,6 +715,16 @@ export const StudyView = memo(function StudyView({
               </div>
             </article>
           </div>
+
+          {/* Inline Acoustic Micro-Practice Drawer (Rendered OUTSIDE 3D preserve-3d container) */}
+          {pronunciationSession && (
+            <CardPronunciationDrawer
+              session={pronunciationSession}
+              variant="inline"
+              onClose={() => setPronunciationSession(null)}
+              onPronunciationEvaluated={onPronunciationEvaluated}
+            />
+          )}
 
           {/* Bottom Decision & Navigation Controls — Balanced Single-Viewport Mobile Scale */}
           <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center justify-between gap-2 sm:gap-2.5 pt-0.5 sm:pt-1 select-none">

@@ -45,4 +45,7 @@
 
     <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Acoustic Pronunciation Engine & Speaking Lab (WebRTC / MediaRecorder in Capacitor WebView) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 </manifest>

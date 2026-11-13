@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { ArrowLeftRight, Gauge, Volume2 } from 'lucide-react';
+import { ArrowLeftRight, Gauge, Mic, Volume2 } from 'lucide-react';
 import type { EnglishAccent } from '../types/flashcard';
 import {
   cleanEnglishForSpeech,
@@ -35,6 +35,8 @@ interface CardTermAudioControlsProps {
   activeAudio: ActiveAudioPlayback | null;
   speed: SpeechSpeed;
   onSpeedChanged?: (next: SpeechSpeed) => void;
+  onOpenPronunciation?: () => void;
+  isPronunciationOpen?: boolean;
 }
 
 export const CardTermAudioControls = memo(function CardTermAudioControls({
@@ -44,6 +46,8 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
   activeAudio,
   speed,
   onSpeedChanged,
+  onOpenPronunciation,
+  isPronunciationOpen = false,
 }: CardTermAudioControlsProps) {
   const cleanedTerm = cleanEnglishForSpeech(term);
   const isPlayingUs =
@@ -256,6 +260,29 @@ export const CardTermAudioControls = memo(function CardTermAudioControls({
           <Gauge className="w-3.5 h-3.5 shrink-0 opacity-85" />
           <span className="font-mono-num">{isSlow ? '0.7x Lento' : '1x Normal'}</span>
         </button>
+
+        {onOpenPronunciation && (
+          <button
+            type="button"
+            data-testid="card-pronunciation-mic-front"
+            aria-pressed={isPronunciationOpen}
+            aria-label={`Treinar pronúncia de ${term}`}
+            title="Treinar pronúncia com avaliação acústica IA"
+            onClick={(e) => {
+              e.stopPropagation();
+              void triggerTap();
+              onOpenPronunciation();
+            }}
+            className={`min-h-[36px] lg:min-h-[34px] inline-flex items-center gap-1.5 px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#28665E] ${
+              isPronunciationOpen
+                ? 'bg-[#28665E] text-white dark:bg-[#2EA98C] dark:text-[#0E1715] border border-[#28665E] dark:border-[#2EA98C]'
+                : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1D302D] dark:hover:bg-[#253D39] text-[#1E4E47] dark:text-[#86CEC2] border border-[#C2DAD5] dark:border-[#2F4B46]'
+            }`}
+          >
+            <Mic className="w-3.5 h-3.5 shrink-0" />
+            <span>🎤 Treinar</span>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -266,6 +293,8 @@ interface BackFaceTermAudioControlsProps {
   activeAudio: ActiveAudioPlayback | null;
   speed: SpeechSpeed;
   onSpeedChanged?: (next: SpeechSpeed) => void;
+  onOpenPronunciation?: () => void;
+  isPronunciationOpen?: boolean;
 }
 
 export const BackFaceTermAudioControls = memo(function BackFaceTermAudioControls({
@@ -273,6 +302,8 @@ export const BackFaceTermAudioControls = memo(function BackFaceTermAudioControls
   activeAudio,
   speed,
   onSpeedChanged,
+  onOpenPronunciation,
+  isPronunciationOpen = false,
 }: BackFaceTermAudioControlsProps) {
   const cleanedTerm = cleanEnglishForSpeech(term);
   const isPlayingUs =
@@ -362,6 +393,29 @@ export const BackFaceTermAudioControls = memo(function BackFaceTermAudioControls
       >
         {isSlow ? '0.7x' : '1x'}
       </button>
+
+      {onOpenPronunciation && (
+        <button
+          type="button"
+          data-testid="card-pronunciation-mic-back"
+          aria-pressed={isPronunciationOpen}
+          aria-label={`Treinar pronúncia de ${term} no verso`}
+          title="Treinar pronúncia (🎤)"
+          onClick={(e) => {
+            e.stopPropagation();
+            void triggerTap();
+            onOpenPronunciation();
+          }}
+          className={`min-h-[40px] lg:min-h-[32px] inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+            isPronunciationOpen
+              ? 'bg-[#28665E] text-white dark:bg-[#2EA98C] dark:text-[#0E1715]'
+              : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1D302D] dark:hover:bg-[#253D39] text-[#1E4E47] dark:text-[#86CEC2] border border-[#C2DAD5] dark:border-[#2F4B46]'
+          }`}
+        >
+          <Mic className="w-3 h-3 shrink-0" />
+          <span>🎤</span>
+        </button>
+      )}
     </div>
   );
 });
@@ -373,6 +427,7 @@ interface SentenceAudioButtonsProps {
   compact?: boolean;
   activeAudio: ActiveAudioPlayback | null;
   speed: SpeechSpeed;
+  onOpenPronunciation?: () => void;
 }
 
 export const SentenceAudioButtons = memo(function SentenceAudioButtons({
@@ -382,6 +437,7 @@ export const SentenceAudioButtons = memo(function SentenceAudioButtons({
   compact = false,
   activeAudio,
   speed,
+  onOpenPronunciation,
 }: SentenceAudioButtonsProps) {
   const cleaned = cleanEnglishForSpeech(sentence);
 
@@ -447,6 +503,22 @@ export const SentenceAudioButtons = memo(function SentenceAudioButtons({
         )}
         <span>UK</span>
       </button>
+
+      {onOpenPronunciation && (
+        <button
+          type="button"
+          aria-label={`Treinar pronúncia da frase ${indexLabel}${suffix}`}
+          title="Treinar pronúncia desta frase (🎤)"
+          onClick={(e) => {
+            e.stopPropagation();
+            void triggerTap();
+            onOpenPronunciation();
+          }}
+          className={`inline-flex items-center justify-center font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${sizeClasses} bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1D302D] dark:hover:bg-[#253D39] text-[#1E4E47] dark:text-[#86CEC2]`}
+        >
+          <Mic className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+        </button>
+      )}
     </div>
   );
 });

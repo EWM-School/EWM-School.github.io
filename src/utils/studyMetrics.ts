@@ -52,10 +52,16 @@ export interface UserStudyStats {
   todayDiscoveryDate?: string; // YYYY-MM-DD anti-farming cap window
   todayDiscoveryKeys?: string[]; // canonical keys rewarded today (max 5/day)
   monthlyDiscoveryBonusXp?: number; // accumulated +2 XP discovery bonuses in current month
+  todaySpeakingDate?: string; // YYYY-MM-DD anti-farming window for pronunciation practice
+  todaySpeakingPhraseRewards?: Record<string, number>; // phraseKey -> max XP rewarded today (3 or 5)
+  monthlySpeakingXp?: number; // accumulated legitimate speaking XP in current month
 }
 
 export const DISCOVERY_BONUS_XP = 2;
 export const MAX_DAILY_DISCOVERY_BONUSES = 5;
+export const SPEAKING_NATIVE_XP = 5;
+export const SPEAKING_POLISH_XP = 3;
+export const MAX_DAILY_SPEAKING_XP = 75;
 
 const STORAGE_KEY = 'ewm_v5_study_metrics';
 const LEADERBOARD_CACHE_KEY = 'ewm_v6_leaderboard_cache';
@@ -88,6 +94,9 @@ export function getDefaultStudyStats(d = new Date()): UserStudyStats {
     todayDiscoveryDate: getTodayDateString(d),
     todayDiscoveryKeys: [],
     monthlyDiscoveryBonusXp: 0,
+    todaySpeakingDate: getTodayDateString(d),
+    todaySpeakingPhraseRewards: {},
+    monthlySpeakingXp: 0,
   };
 }
 
@@ -150,6 +159,17 @@ export function loadUserStudyStats(): UserStudyStats {
       monthlyDiscoveryBonusXp:
         parsed.currentMonthKey === currentMonth && typeof parsed.monthlyDiscoveryBonusXp === 'number'
           ? Math.max(0, Math.floor(parsed.monthlyDiscoveryBonusXp))
+          : 0,
+      todaySpeakingDate: today,
+      todaySpeakingPhraseRewards:
+        parsed.todaySpeakingDate === today &&
+        parsed.todaySpeakingPhraseRewards &&
+        typeof parsed.todaySpeakingPhraseRewards === 'object'
+          ? { ...parsed.todaySpeakingPhraseRewards }
+          : {},
+      monthlySpeakingXp:
+        parsed.currentMonthKey === currentMonth && typeof parsed.monthlySpeakingXp === 'number'
+          ? Math.max(0, Math.floor(parsed.monthlySpeakingXp))
           : 0,
     };
 
@@ -375,6 +395,120 @@ export function recordGlobalDiscoveryBonusInStats(
   };
 }
 
+/**
+ * Speaking Practice XP with strict per-phrase/day Anti-Farming Lock:
+ * - `NATIVE_LIKE` (🟢): up to +5 XP per unique phrase per day
+ * - `UNDERSTANDABLE_POLISH` (🟡): up to +3 XP per unique phrase per day (upgrading to NATIVE_LIKE on the same day awards the +2 XP delta)
+ * - `NEEDS_PRACTICE` (🔴): 0 XP
+ */
+export function recordSpeakingPracticeInStats(
+  phraseKey: string,
+  verdict: 'NATIVE_LIKE' | 'UNDERSTANDABLE_POLISH' | 'NEEDS_PRACTICE',
+  current: UserStudyStats,
+  now = new Date()
+): {
+  updatedStats: UserStudyStats;
+  awardedXp: number;
+  alreadyRewardedToday: boolean;
+  dailyCappedOut: boolean;
+} {
+  const cleanKey = String(phraseKey || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9'_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 120);
+
+  const targetTierXp =
+    verdict === 'NATIVE_LIKE'
+      ? SPEAKING_NATIVE_XP
+      : verdict === 'UNDERSTANDABLE_POLISH'
+      ? SPEAKING_POLISH_XP
+      : 0;
+
+  if (!cleanKey || targetTierXp <= 0) {
+    return {
+      updatedStats: current,
+      awardedXp: 0,
+      alreadyRewardedToday: false,
+      dailyCappedOut: false,
+    };
+  }
+
+  const today = getTodayDateString(now);
+  const currentMonth = getCurrentMonthKey(now);
+  const isNewMonth = current.currentMonthKey !== currentMonth;
+  const isNewSpeakingDay = current.todaySpeakingDate !== today;
+
+  const existingRewards: Record<string, number> = isNewSpeakingDay
+    ? {}
+    : { ...(current.todaySpeakingPhraseRewards || {}) };
+  const baseMonthlySpeakingXp = isNewMonth
+    ? 0
+    : Math.max(0, Math.floor(current.monthlySpeakingXp || 0));
+
+  const previousPhraseXp = Math.max(0, Math.floor(existingRewards[cleanKey] || 0));
+  if (targetTierXp <= previousPhraseXp) {
+    return {
+      updatedStats: current,
+      awardedXp: 0,
+      alreadyRewardedToday: true,
+      dailyCappedOut: false,
+    };
+  }
+
+  const todayAccumulatedSpeakingXp = Object.values(existingRewards).reduce(
+    (sum, val) => sum + (typeof val === 'number' && val > 0 ? val : 0),
+    0
+  );
+
+  const remainingDailyAllowance = Math.max(
+    0,
+    MAX_DAILY_SPEAKING_XP - todayAccumulatedSpeakingXp
+  );
+  if (remainingDailyAllowance <= 0) {
+    return {
+      updatedStats: current,
+      awardedXp: 0,
+      alreadyRewardedToday: false,
+      dailyCappedOut: true,
+    };
+  }
+
+  const rawDelta = targetTierXp - previousPhraseXp;
+  const awardedXp = Math.min(rawDelta, remainingDailyAllowance);
+
+  const nextRewards: Record<string, number> = {
+    ...existingRewards,
+    [cleanKey]: previousPhraseXp + awardedXp,
+  };
+
+  const nextActiveDays = isNewMonth ? [] : [...current.monthlyActiveDays];
+  if (!nextActiveDays.includes(today)) {
+    nextActiveDays.push(today);
+  }
+
+  const updatedStats: UserStudyStats = {
+    ...current,
+    todayDate: today,
+    currentMonthKey: currentMonth,
+    monthlyActiveDays: nextActiveDays,
+    monthlyStudyMinutes: isNewMonth ? 0 : current.monthlyStudyMinutes,
+    todaySpeakingDate: today,
+    todaySpeakingPhraseRewards: nextRewards,
+    monthlySpeakingXp: baseMonthlySpeakingXp + awardedXp,
+    lastActiveTimestamp: now.getTime(),
+  };
+
+  saveUserStudyStats(updatedStats);
+  return {
+    updatedStats,
+    awardedXp,
+    alreadyRewardedToday: false,
+    dailyCappedOut: false,
+  };
+}
+
 export function formatStudyHoursMinutes(minutes: number): string {
   const totalMin = Math.max(0, Math.round(minutes));
   const hours = Math.floor(totalMin / 60);
@@ -477,9 +611,10 @@ export function computeRealStudentMetrics(inputs: RealScoreInputs): {
   // Total real cards interacted with (at least mastered + review if progressed earlier)
   const cardsReviewed = Math.max(monthlyUniqueCards, mastered + review);
   const discoveryBonusXp = Math.max(0, Math.floor(inputs.stats.monthlyDiscoveryBonusXp || 0));
+  const speakingXp = Math.max(0, Math.floor(inputs.stats.monthlySpeakingXp || 0));
   const activeDays = Math.max(
     inputs.stats.monthlyActiveDays.length,
-    cardsReviewed > 0 || quiz > 0 || discoveryBonusXp > 0 ? 1 : 0
+    cardsReviewed > 0 || quiz > 0 || discoveryBonusXp > 0 || speakingXp > 0 ? 1 : 0
   );
   const studyTimeMinutes = Math.max(0, Math.floor(inputs.stats.monthlyStudyMinutes || 0));
   const minutosEstudados = Math.max(
@@ -492,14 +627,19 @@ export function computeRealStudentMetrics(inputs: RealScoreInputs): {
     review * 8 +
     cardsReviewed * 10 +
     quiz * 15 +
-    (cardsReviewed > 0 || quiz > 0 || studyTimeMinutes > 0 ? activeDays * 50 : 0) +
+    (cardsReviewed > 0 || quiz > 0 || studyTimeMinutes > 0 || speakingXp > 0
+      ? activeDays * 50
+      : 0) +
     studyTimeMinutes * 2 +
-    discoveryBonusXp;
+    discoveryBonusXp +
+    speakingXp;
 
   let statusText = 'Pronto para iniciar';
   if (mastered >= 20) statusText = `${mastered} expressões dominadas`;
   else if (quiz >= 5) statusText = `${quiz} acertos no Modo Quiz`;
+  else if (speakingXp >= 15) statusText = 'Treinando pronúncia no Speaking Lab';
   else if (cardsReviewed > 0) statusText = `${cardsReviewed} cards praticados`;
+  else if (speakingXp > 0) statusText = 'Praticando pronúncia US & UK';
   else if (discoveryBonusXp > 0) statusText = 'Expandindo o Acervo EWM';
   else if (studyTimeMinutes > 0) statusText = 'Praticando pronúncia US & UK';
 

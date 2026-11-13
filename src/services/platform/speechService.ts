@@ -34,6 +34,7 @@ export interface ActiveAudioPlayback {
 
 export interface SpeakOptions {
   speed?: SpeechSpeed;
+  rateOverride?: number;
   isComparing?: boolean;
   preferGeminiNeural?: boolean;
 }
@@ -593,7 +594,8 @@ async function playNativeMobileTTS(
   accent: EnglishAccent,
   speed: SpeechSpeed,
   token: number,
-  isComparing: boolean
+  isComparing: boolean,
+  rateOverride?: number
 ): Promise<boolean> {
   if (!Capacitor.isNativePlatform() || token !== currentPlaybackToken) {
     return false;
@@ -603,7 +605,12 @@ async function playNativeMobileTTS(
   // Maintain full British RP orthography & heteronym normalization ('shedule', 'leftenant', 'colour', etc.)
   const spokenText =
     accent === 'uk' ? prepareBritishWebSpeechText(cleanedText) : cleanedText;
-  const rate = speed === 'slow' ? 0.72 : 0.96;
+  const rate =
+    typeof rateOverride === 'number' && rateOverride > 0
+      ? rateOverride
+      : speed === 'slow'
+      ? 0.72
+      : 0.96;
   const pitch = accent === 'uk' ? 0.98 : 1.0;
 
   await resolveNativeMobileVoiceIndices();
@@ -791,7 +798,8 @@ async function playGeminiNeuralTTS(
   accent: EnglishAccent,
   speed: SpeechSpeed,
   token: number,
-  isComparing: boolean
+  isComparing: boolean,
+  rateOverride?: number
 ): Promise<boolean> {
   if (
     typeof window === 'undefined' ||
@@ -804,6 +812,9 @@ async function playGeminiNeuralTTS(
 
   const endpoint = resolveTtsApiEndpoint();
   if (!endpoint) return false;
+
+  const effectivePlaybackRate =
+    typeof rateOverride === 'number' && rateOverride > 0 ? rateOverride : 1.0;
 
   const directive = buildGeminiTtsDirective(cleanedText, accent, speed);
   const cacheKey = `${directive.languageCode}|${speed}|${directive.normalizedText.toLowerCase()}`;
@@ -819,7 +830,7 @@ async function playGeminiNeuralTTS(
       engine: 'gemini-tts',
       voiceName: `Gemini ${cached.voiceName} (${directive.languageCode})`,
     });
-    return playDataUrlOrSrcAudio(cached.dataUrl, 1.0, token, 2500);
+    return playDataUrlOrSrcAudio(cached.dataUrl, effectivePlaybackRate, token, 2500);
   }
 
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -876,7 +887,7 @@ async function playGeminiNeuralTTS(
     }
     geminiClientAudioCache.set(cacheKey, { dataUrl, voiceName: voiceLabel });
 
-    return playDataUrlOrSrcAudio(dataUrl, 1.0, token, 3000);
+    return playDataUrlOrSrcAudio(dataUrl, effectivePlaybackRate, token, 3000);
   } catch {
     if (activeGeminiAbortController === controller) {
       activeGeminiAbortController = null;
@@ -889,7 +900,8 @@ async function playCloudNativeTTS(
   cleanedText: string,
   accent: EnglishAccent,
   speed: SpeechSpeed,
-  token: number
+  token: number,
+  rateOverride?: number
 ): Promise<boolean> {
   if (
     typeof document === 'undefined' ||
@@ -898,7 +910,12 @@ async function playCloudNativeTTS(
     return false;
   }
   const urls = buildNativeCloudAudioUrls(cleanedText, accent);
-  const rate = speed === 'slow' ? 0.72 : 1.0;
+  const rate =
+    typeof rateOverride === 'number' && rateOverride > 0
+      ? rateOverride
+      : speed === 'slow'
+      ? 0.72
+      : 1.0;
 
   for (const url of urls) {
     if (token !== currentPlaybackToken) return false;
@@ -933,7 +950,8 @@ async function speakSingleSegmentInternal(
   speed: SpeechSpeed,
   token: number,
   isComparing: boolean,
-  preferGeminiNeural = false
+  preferGeminiNeural = false,
+  rateOverride?: number
 ): Promise<boolean> {
   if (!cleaned || typeof window === 'undefined' || token !== currentPlaybackToken) {
     return false;
@@ -945,23 +963,44 @@ async function speakSingleSegmentInternal(
   // Offline-ready, 0ms network dependency, strictly enforcing `en-US` vs `en-GB` + RP normalization.
   if (Capacitor.isNativePlatform()) {
     if (preferGeminiNeural) {
-      const neuralOk = await playGeminiNeuralTTS(cleaned, accent, speed, token, isComparing);
+      const neuralOk = await playGeminiNeuralTTS(
+        cleaned,
+        accent,
+        speed,
+        token,
+        isComparing,
+        rateOverride
+      );
       if (token !== currentPlaybackToken) return false;
       if (neuralOk) return true;
     }
 
-    const nativeOk = await playNativeMobileTTS(cleaned, accent, speed, token, isComparing);
+    const nativeOk = await playNativeMobileTTS(
+      cleaned,
+      accent,
+      speed,
+      token,
+      isComparing,
+      rateOverride
+    );
     if (token !== currentPlaybackToken) return false;
     if (nativeOk) return true;
 
     // Fallback if device lacks offline TTS engine
-    const cloudOk = await playCloudNativeTTS(cleaned, accent, speed, token);
+    const cloudOk = await playCloudNativeTTS(cleaned, accent, speed, token, rateOverride);
     return token === currentPlaybackToken && cloudOk;
   }
 
   // PATH B: PC / Web Browser Platform
   if (preferGeminiNeural) {
-    const neuralOk = await playGeminiNeuralTTS(cleaned, accent, speed, token, isComparing);
+    const neuralOk = await playGeminiNeuralTTS(
+      cleaned,
+      accent,
+      speed,
+      token,
+      isComparing,
+      rateOverride
+    );
     if (token !== currentPlaybackToken) return false;
     if (neuralOk) return true;
   }
@@ -979,6 +1018,8 @@ async function speakSingleSegmentInternal(
 
   if (isWebSpeechSupported() && hasVerifiedLocaleVoice && matchedVoice) {
     const tuning = computeUtteranceTuning(accent, speed);
+    const effectiveRate =
+      typeof rateOverride === 'number' && rateOverride > 0 ? rateOverride : tuning.rate;
     const spokenText =
       accent === 'uk' ? prepareBritishWebSpeechText(cleaned) : cleaned;
 
@@ -1014,7 +1055,7 @@ async function speakSingleSegmentInternal(
         } catch {
           // Keep explicit utter.lang binding
         }
-        utter.rate = tuning.rate;
+        utter.rate = effectiveRate;
         utter.pitch = tuning.pitch;
 
         let settled = false;
@@ -1068,7 +1109,7 @@ async function speakSingleSegmentInternal(
 
         activeUtterance = utter;
 
-        const maxDuration = estimateSpeechSafetyTimeoutMs(spokenText, tuning.rate);
+        const maxDuration = estimateSpeechSafetyTimeoutMs(spokenText, effectiveRate);
         safetyTimer = setTimeout(() => {
           finish(true);
         }, maxDuration);
@@ -1099,7 +1140,14 @@ async function speakSingleSegmentInternal(
 
   // Intelligent Neural Fallback via Gemini TTS (`POST /api/gemini/tts`)
   const fallbackStartedAt = Date.now();
-  const geminiOk = await playGeminiNeuralTTS(cleaned, accent, speed, token, isComparing);
+  const geminiOk = await playGeminiNeuralTTS(
+    cleaned,
+    accent,
+    speed,
+    token,
+    isComparing,
+    rateOverride
+  );
   if (token !== currentPlaybackToken) return false;
   if (geminiOk) return true;
 
@@ -1113,7 +1161,7 @@ async function speakSingleSegmentInternal(
     engine: 'cloud-fallback',
   });
 
-  const cloudOk = await playCloudNativeTTS(cleaned, accent, speed, token);
+  const cloudOk = await playCloudNativeTTS(cleaned, accent, speed, token, rateOverride);
   if (token !== currentPlaybackToken) return false;
 
   if (!cloudOk) {
@@ -1142,6 +1190,7 @@ export async function speakEnglishText(
   const speed = options?.speed ?? currentSpeed;
   const isComparing = Boolean(options?.isComparing);
   const preferGeminiNeural = Boolean(options?.preferGeminiNeural);
+  const rateOverride = options?.rateOverride;
 
   const ok = await speakSingleSegmentInternal(
     cleaned,
@@ -1149,7 +1198,8 @@ export async function speakEnglishText(
     speed,
     token,
     isComparing,
-    preferGeminiNeural
+    preferGeminiNeural,
+    rateOverride
   );
   if (token === currentPlaybackToken) {
     notifyListeners(null);

@@ -127,6 +127,7 @@ import {
   loadCachedLeaderboardRecords,
   recordCardReviewInStats,
   recordGlobalDiscoveryBonusInStats,
+  recordSpeakingPracticeInStats,
   recordStudyTimeInStats,
   saveCachedLeaderboardRecords,
   setDailyGoalInStats,
@@ -138,6 +139,11 @@ import {
   toCanonicalExpressionKey,
   type ConsultTranslatePayload,
 } from './utils/linguisticNormalizer';
+import {
+  toSpeakingPhraseDailyKey,
+  type PronunciationEvaluationResult,
+} from './utils/pronunciationEngine';
+import { releaseAllActiveMicrophoneStreams } from './services/platform/acousticPronunciationService';
 import type { ShareCardPayload } from './utils/shareCardGenerator';
 
 // Lazy-loaded heavy screens & modals for 60fps instant startup
@@ -244,6 +250,10 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<AppTab>('study');
   const [studyScope, setStudyScope] = useState<StudyScope>(initialLegacy.workspace.studyScope);
+
+  useEffect(() => {
+    releaseAllActiveMicrophoneStreams();
+  }, [activeTab, showCover]);
 
   const [selectedCategory, setSelectedCategory] = useState<'all' | TopicFolder>('all');
   const [selectedSubtopic, setSelectedSubtopic] = useState<'all' | SubtopicKey>('all');
@@ -1694,6 +1704,43 @@ export default function App() {
     [showToast]
   );
 
+  const handlePronunciationEvaluated = useCallback(
+    (
+      result: PronunciationEvaluationResult,
+      targetText: string
+    ): { awardedXp: number; alreadyRewardedToday: boolean; dailyCappedOut: boolean } => {
+      if (result.audioQualityStatus !== 'CLEAR') {
+        return { awardedXp: 0, alreadyRewardedToday: false, dailyCappedOut: false };
+      }
+
+      const phraseKey = toSpeakingPhraseDailyKey(targetText);
+      const outcome = recordSpeakingPracticeInStats(
+        phraseKey,
+        result.verdict,
+        userStatsRef.current
+      );
+
+      if (outcome.awardedXp > 0) {
+        userStatsRef.current = outcome.updatedStats;
+        setUserStats(outcome.updatedStats);
+        void saveStudyStatsLocal(outcome.updatedStats);
+
+        setRecentXpDelta({ amount: outcome.awardedXp, key: Date.now() });
+        if (xpDeltaTimerRef.current) window.clearTimeout(xpDeltaTimerRef.current);
+        xpDeltaTimerRef.current = window.setTimeout(() => {
+          setRecentXpDelta(null);
+        }, 1500);
+      }
+
+      return {
+        awardedXp: outcome.awardedXp,
+        alreadyRewardedToday: outcome.alreadyRewardedToday,
+        dailyCappedOut: outcome.dailyCappedOut,
+      };
+    },
+    []
+  );
+
   const handleAddConsultToStudy = useCallback(
     (payload: ConsultTranslatePayload) => {
       const canonical = toCanonicalExpressionKey(payload.englishExpression);
@@ -2007,6 +2054,7 @@ export default function App() {
                       onDeleteCard={setPendingDeleteCard}
                       onShareCard={(card) => setSharePayload({ kind: 'flashcard', card })}
                       onToggleFocusMode={() => setFocusMode((v) => !v)}
+                      onPronunciationEvaluated={handlePronunciationEvaluated}
                       onResetFilters={() => {
                         setSelectedCategory('all');
                         setSelectedSubtopic('all');
@@ -2083,6 +2131,7 @@ export default function App() {
                           handleTabChange('study');
                         }}
                         onNotify={showToast}
+                        onPronunciationEvaluated={handlePronunciationEvaluated}
                       />
                     </Suspense>
                   )}
@@ -2093,8 +2142,13 @@ export default function App() {
               {activePillar === 'speaking' && (
                 <Suspense fallback={<ViewSuspenseFallback />}>
                   <LazySpeakingLabView
-                    cards={filteredStudyCards.length > 0 ? filteredStudyCards : cards}
-                    onGoToStudy={() => handleSelectPillar('study')}
+                    allCards={cards}
+                    studyCards={filteredStudyCards}
+                    onGoToStudy={() => {
+                      releaseAllActiveMicrophoneStreams();
+                      handleSelectPillar('study');
+                    }}
+                    onPronunciationEvaluated={handlePronunciationEvaluated}
                   />
                 </Suspense>
               )}
