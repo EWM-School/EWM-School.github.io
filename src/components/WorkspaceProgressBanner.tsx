@@ -26,6 +26,7 @@ interface WorkspaceProgressBannerProps {
   totalCards: number;
   quizScore: number;
   cloudLeaderboard: CloudLeaderboardRecord[];
+  recentXpDelta?: { amount: number; key: number } | null;
   onUpdateGoal: (newGoal: number) => void;
   onOpenRankingModal: () => void;
 }
@@ -42,6 +43,7 @@ export const WorkspaceProgressBanner = memo(function WorkspaceProgressBanner({
   totalCards,
   quizScore,
   cloudLeaderboard,
+  recentXpDelta,
   onUpdateGoal,
   onOpenRankingModal,
 }: WorkspaceProgressBannerProps) {
@@ -140,16 +142,27 @@ export const WorkspaceProgressBanner = memo(function WorkspaceProgressBanner({
 
         {/* Right: Aligned XP Pill + Ranking Position + Active Days/Hours + Goal Picker */}
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 ml-auto">
-          {/* Live XP Pill */}
-          <button
-            type="button"
-            onClick={onOpenRankingModal}
-            title="Pontuação XP real acumulada neste mês"
-            className="inline-flex items-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-xl border border-[#C6DBD7] dark:border-[#38E5A5]/30 bg-[#EAF3F1]/90 dark:bg-[#172823] text-[11px] sm:text-xs font-bold text-[#1E4E47] dark:text-[#38E5A5] font-mono-num cursor-pointer"
-          >
-            <Zap className="w-3.5 h-3.5 shrink-0 fill-current opacity-85" />
-            <span>{xpScore} XP</span>
-          </button>
+          {/* Live XP Pill + Floating +XP Animation */}
+          <div className="relative inline-flex items-center">
+            <button
+              type="button"
+              onClick={onOpenRankingModal}
+              title="Pontuação XP real acumulada neste mês"
+              className="inline-flex items-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-xl border border-[#C6DBD7] dark:border-[#38E5A5]/30 bg-[#EAF3F1]/90 dark:bg-[#172823] text-[11px] sm:text-xs font-bold text-[#1E4E47] dark:text-[#38E5A5] font-mono-num cursor-pointer"
+            >
+              <Zap className="w-3.5 h-3.5 shrink-0 fill-current opacity-85" />
+              <span>{xpScore} XP</span>
+            </button>
+            {recentXpDelta && recentXpDelta.amount > 0 && (
+              <span
+                key={recentXpDelta.key}
+                aria-hidden="true"
+                className="ewm-float-xp pointer-events-none absolute -top-2.5 right-0 px-1.5 py-0.5 rounded-md bg-[#38E5A5] text-[#0B1F17] text-[10px] font-extrabold font-mono-num shadow-sm"
+              >
+                +{recentXpDelta.amount} XP
+              </span>
+            )}
+          </div>
 
           {/* Live Ranking Position Pill */}
           <button

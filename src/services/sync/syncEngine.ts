@@ -1,8 +1,10 @@
 import {
   deleteCustomCardFromCloud,
   deleteUserDeckFromCloud,
+  publishCuratedSchoolCardInCloud,
   saveCardMastery,
   updateUserWorkspaceSettings,
+  upsertCollectiveLinguisticCacheInCloud,
   upsertCustomCard,
   upsertLeaderboardEntryInCloud,
   upsertUserDeck,
@@ -15,16 +17,19 @@ import type {
   SyncStatus,
   UserDeck,
 } from '../../types/flashcard';
+import type { LinguisticEngineResult } from '../../utils/linguisticNormalizer';
 import { getNetworkSnapshot, subscribeNetworkStatus } from './networkMonitor';
 import {
   deleteCustomCardLocal,
   deleteDeckLocal,
   getPendingSyncQueueItems,
   markSyncQueueItemSynced,
+  putLinguisticCacheLocal,
   recordSyncQueueRetryFailure,
   saveCardProgressLocal,
   saveCustomCardLocal,
   saveDeckLocal,
+  saveDiscoveredSchoolCardLocal,
   saveQuizSessionLocal,
   saveWorkspaceConfigLocal,
   upsertSyncQueueEvent,
@@ -232,6 +237,19 @@ async function executeQueueItemOnCloud(uid: string, item: SyncQueueItem): Promis
         minutosEstudados: payload.minutosEstudados,
         statusText: payload.statusText,
       });
+      return;
+
+    case 'LINGUISTIC_CACHE_UPSERT':
+      await upsertCollectiveLinguisticCacheInCloud(uid, {
+        cacheId: payload.cacheId,
+        mode: payload.mode,
+        canonicalKey: payload.canonicalKey,
+        payloadJson: payload.payloadJson,
+      });
+      return;
+
+    case 'CURATED_GLOBAL_CARD_UPSERT':
+      await publishCuratedSchoolCardInCloud(uid, payload.card);
       return;
   }
 }
@@ -596,4 +614,73 @@ export async function recordLeaderboardScoreOptimistic(
   if (activeUid && cloudAuthorized && getNetworkSnapshot().connected) {
     scheduleFlush(600);
   }
+}
+
+export async function recordLinguisticCacheOptimistic(params: {
+  cacheId: string;
+  canonicalKey: string;
+  result: LinguisticEngineResult;
+}): Promise<void> {
+  const nowIso = new Date().toISOString();
+  const cleanResult: LinguisticEngineResult = { ...params.result };
+  delete cleanResult.cacheLayer;
+
+  await putLinguisticCacheLocal({
+    cacheKey: params.cacheId,
+    canonicalKey: params.canonicalKey,
+    mode: params.result.mode,
+    result: cleanResult,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  });
+
+  const payloadJson = JSON.stringify(cleanResult);
+  if (activeUid && cloudAuthorized && payloadJson.length >= 20 && payloadJson.length <= 24000) {
+    await upsertSyncQueueEvent({
+      dedupeKey: `lcache:${params.cacheId}`,
+      action: 'LINGUISTIC_CACHE_UPSERT',
+      payload: {
+        type: 'LINGUISTIC_CACHE_UPSERT',
+        cacheId: params.cacheId,
+        mode: params.result.mode,
+        canonicalKey: params.canonicalKey,
+        payloadJson,
+      },
+      ownerUid: activeUid,
+    });
+    await refreshPendingCache();
+    if (getNetworkSnapshot().connected) {
+      scheduleFlush(350);
+    }
+  }
+}
+
+export async function recordCuratedGlobalCardOptimistic(card: Flashcard): Promise<Flashcard> {
+  const stamped: Flashcard = {
+    ...card,
+    origin: 'global',
+    published: true,
+    archived: false,
+    updatedAt: Date.now(),
+  };
+
+  await saveDiscoveredSchoolCardLocal(stamped);
+
+  if (activeUid && cloudAuthorized) {
+    await upsertSyncQueueEvent({
+      dedupeKey: `gcatalog:${stamped.id}`,
+      action: 'CURATED_GLOBAL_CARD_UPSERT',
+      payload: {
+        type: 'CURATED_GLOBAL_CARD_UPSERT',
+        card: stamped,
+      },
+      ownerUid: activeUid,
+    });
+    await refreshPendingCache();
+    if (getNetworkSnapshot().connected) {
+      scheduleFlush(350);
+    }
+  }
+
+  return stamped;
 }

@@ -54,11 +54,13 @@ import {
 import {
   clearAllUserOfflineDataOnAccountDelete,
   flushSyncQueue,
+  getDiscoveredSchoolCardsLocal,
   getPendingEntitySets,
   getSyncEngineSnapshot,
   hydrateOfflineDatabase,
   loadLegacyFallbackSync,
   recordCardMasteryOptimistic,
+  recordCuratedGlobalCardOptimistic,
   recordCustomCardDeleteOptimistic,
   recordCustomCardUpsertOptimistic,
   recordDeckDeleteOptimistic,
@@ -76,6 +78,10 @@ import {
   startSyncEngine,
   subscribeSyncEngineState,
 } from './services/sync';
+import {
+  buildCuratedGlobalSchoolCard,
+  type AutoFeedCandidateInput,
+} from './services/linguisticEngineClient';
 import type {
   AdminRecord,
   AppTab,
@@ -120,12 +126,18 @@ import {
   getCurrentMonthKey,
   loadCachedLeaderboardRecords,
   recordCardReviewInStats,
+  recordGlobalDiscoveryBonusInStats,
   recordStudyTimeInStats,
   saveCachedLeaderboardRecords,
   setDailyGoalInStats,
   type CloudLeaderboardRecord,
   type UserStudyStats,
 } from './utils/studyMetrics';
+import {
+  formatCleanExampleSentence,
+  toCanonicalExpressionKey,
+  type ConsultTranslatePayload,
+} from './utils/linguisticNormalizer';
 import type { ShareCardPayload } from './utils/shareCardGenerator';
 
 // Lazy-loaded heavy screens & modals for 60fps instant startup
@@ -150,6 +162,11 @@ const LazyAdminModal = lazy(() =>
 const LazyPhoneticGrammarModal = lazy(() =>
   import('./components/PhoneticGrammarModal').then((m) => ({
     default: m.PhoneticGrammarModal,
+  }))
+);
+const LazyLinguisticLookupModal = lazy(() =>
+  import('./components/LinguisticLookupModal').then((m) => ({
+    default: m.LinguisticLookupModal,
   }))
 );
 const LazyMonthlyRankingModal = lazy(() =>
@@ -246,6 +263,7 @@ export default function App() {
   const [editingCard, setEditingCard] = useState<Flashcard | null>(null);
   const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [phoneticModalOpen, setPhoneticModalOpen] = useState(false);
+  const [unifiedLookupOpen, setUnifiedLookupOpen] = useState(false);
   const [rankingModalOpen, setRankingModalOpen] = useState(false);
   const [reminderModalOpen, setReminderModalOpen] = useState(false);
   const [downloadModalOpen, setDownloadModalOpen] = useState<boolean>(() => {
@@ -264,9 +282,17 @@ export default function App() {
   const [sharePayload, setSharePayload] = useState<ShareCardPayload | null>(null);
   const [availableUpdate, setAvailableUpdate] = useState<AppUpdateInfo | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [recentXpDelta, setRecentXpDelta] = useState<{ amount: number; key: number } | null>(
+    null
+  );
 
   const toastTimerRef = useRef<number | null>(null);
+  const xpDeltaTimerRef = useRef<number | null>(null);
   const cloudReadyForUidRef = useRef<string | null>(null);
+  const globalCardsRef = useRef<Flashcard[]>(globalCards);
+  globalCardsRef.current = globalCards;
+  const userStatsRef = useRef<UserStudyStats>(userStats);
+  userStatsRef.current = userStats;
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
@@ -357,6 +383,7 @@ export default function App() {
     cardModalOpen,
     adminModalOpen,
     phoneticModalOpen,
+    unifiedLookupOpen,
     rankingModalOpen,
     pendingDeleteCard,
     pendingDeleteDeck,
@@ -372,6 +399,7 @@ export default function App() {
     cardModalOpen,
     adminModalOpen,
     phoneticModalOpen,
+    unifiedLookupOpen,
     rankingModalOpen,
     pendingDeleteCard,
     pendingDeleteDeck,
@@ -415,6 +443,10 @@ export default function App() {
         }
         if (s.adminModalOpen) {
           setAdminModalOpen(false);
+          return true;
+        }
+        if (s.unifiedLookupOpen) {
+          setUnifiedLookupOpen(false);
           return true;
         }
         if (s.phoneticModalOpen) {
@@ -612,8 +644,28 @@ export default function App() {
     let unsubLeaderboard: (() => void) | null = null;
     try {
       unsubGlobal = subscribeGlobalCards((items) => {
-        setGlobalCards(items);
-        void saveGlobalCardsCacheLocal(items);
+        void getDiscoveredSchoolCardsLocal().then((localDiscovered) => {
+          const seenIds = new Set(items.map((c) => c.id));
+          const seenCanonical = new Set<string>();
+          for (const sc of INITIAL_CARDS) {
+            const ck = toCanonicalExpressionKey(sc.term);
+            if (ck) seenCanonical.add(ck);
+          }
+          for (const ic of items) {
+            const ck = toCanonicalExpressionKey(ic.term);
+            if (ck) seenCanonical.add(ck);
+          }
+          const combined = [...items];
+          for (const dc of localDiscovered) {
+            const ck = toCanonicalExpressionKey(dc.term);
+            if (!dc.id || seenIds.has(dc.id) || (ck && seenCanonical.has(ck))) continue;
+            seenIds.add(dc.id);
+            if (ck) seenCanonical.add(ck);
+            combined.push({ ...dc, origin: 'global', published: true });
+          }
+          setGlobalCards(combined);
+          void saveGlobalCardsCacheLocal(items);
+        });
       });
     } catch {
       // handled inside subscribeGlobalCards
@@ -1021,12 +1073,21 @@ export default function App() {
         setCardModalOpen(false);
         setAdminModalOpen(false);
         setPhoneticModalOpen(false);
+        setUnifiedLookupOpen(false);
         setRankingModalOpen(false);
         setReminderModalOpen(false);
         setAuthModalOpen(false);
         setPendingDeleteCard(null);
         setPendingDeleteDeck(null);
         if (focusMode) setFocusMode(false);
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        if (!showCover) {
+          e.preventDefault();
+          setUnifiedLookupOpen((prev) => !prev);
+        }
         return;
       }
 
@@ -1037,20 +1098,13 @@ export default function App() {
         cardModalOpen ||
         adminModalOpen ||
         phoneticModalOpen ||
+        unifiedLookupOpen ||
         rankingModalOpen ||
         reminderModalOpen ||
         authModalOpen ||
         pendingDeleteCard ||
         pendingDeleteDeck
       ) {
-        return;
-      }
-
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        if (!showCover) {
-          e.preventDefault();
-          setPhoneticModalOpen(true);
-        }
         return;
       }
 
@@ -1120,6 +1174,7 @@ export default function App() {
     cardModalOpen,
     adminModalOpen,
     phoneticModalOpen,
+    unifiedLookupOpen,
     rankingModalOpen,
     reminderModalOpen,
     authModalOpen,
@@ -1598,6 +1653,111 @@ export default function App() {
     setCardModalOpen(true);
   }, []);
 
+  /**
+   * Automatic Feeding of "Acervo Completo EWM" (Single Unified School Deck)
+   * Enforces the 3 Mandatory Invisible Guards:
+   * 1. "Professor Invisível" Curatorship (`isValidForGlobalSchoolDeck` + structural checks)
+   * 2. Canonical Anti-Duplicate Normalization (`"to hang up"`, `"Hang up!"`, `"HANG UP"` -> `"hang up"`)
+   * 3. Anti-Farming Symbolic Bonus (`+2 XP` per unseen expression, strictly capped at max 5/day)
+   */
+  const handleAutoFeedSchoolCatalog = useCallback(
+    (candidate: AutoFeedCandidateInput): { integrated: boolean; bonusXpAwarded: number } => {
+      const built = buildCuratedGlobalSchoolCard(candidate, globalCardsRef.current);
+      if (!built) {
+        return { integrated: false, bonusXpAwarded: 0 };
+      }
+
+      const nextGlobal = [built.card, ...globalCardsRef.current];
+      globalCardsRef.current = nextGlobal;
+      setGlobalCards(nextGlobal);
+      void recordCuratedGlobalCardOptimistic(built.card);
+
+      const { updatedStats, awardedXp } = recordGlobalDiscoveryBonusInStats(
+        built.canonicalKey,
+        userStatsRef.current
+      );
+      userStatsRef.current = updatedStats;
+      setUserStats(updatedStats);
+      void saveStudyStatsLocal(updatedStats);
+
+      if (awardedXp > 0) {
+        setRecentXpDelta({ amount: awardedXp, key: Date.now() });
+        if (xpDeltaTimerRef.current) window.clearTimeout(xpDeltaTimerRef.current);
+        xpDeltaTimerRef.current = window.setTimeout(() => {
+          setRecentXpDelta(null);
+        }, 1400);
+        showToast(`✨ Nova expressão integrada ao Acervo EWM (+${awardedXp} XP)`);
+      }
+
+      return { integrated: true, bonusXpAwarded: awardedXp };
+    },
+    [showToast]
+  );
+
+  const handleAddConsultToStudy = useCallback(
+    (payload: ConsultTranslatePayload) => {
+      const canonical = toCanonicalExpressionKey(payload.englishExpression);
+      const existingMatch =
+        cards.find((c) => toCanonicalExpressionKey(c.term) === canonical) ||
+        globalCardsRef.current.find((c) => toCanonicalExpressionKey(c.term) === canonical);
+
+      if (existingMatch) {
+        setSelectedStudyIds((prev) => {
+          const next = new Set(prev);
+          if (next.size < MAX_STUDY_CARDS) {
+            next.add(existingMatch.id);
+            persistWorkspaceOptimistic({ selectedCardIds: Array.from(next) });
+          }
+          return next;
+        });
+        showToast(`"${existingMatch.term}" adicionada ao seu estudo!`);
+        return;
+      }
+
+      const ex1 = payload.examples[0] || {
+        en: payload.englishExpression,
+        pt: payload.primaryTranslation,
+      };
+      const ex2 = payload.examples[1] || ex1;
+      const newId = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const customCard: Flashcard = hydrateCard({
+        id: newId,
+        term: payload.englishExpression,
+        category: payload.suggestedCategory,
+        subtopic: payload.suggestedSubtopic,
+        literal: payload.primaryTranslation,
+        phoneticUs: payload.phoneticUs || undefined,
+        phoneticUk: payload.phoneticUk || undefined,
+        ukNote: payload.usUkDifferences || undefined,
+        colloquial:
+          payload.colloquialPtList.length > 0
+            ? payload.colloquialPtList
+            : [payload.primaryTranslation],
+        exampleEn: formatCleanExampleSentence(ex1.en),
+        examplePt: ex1.pt,
+        exampleEn2: formatCleanExampleSentence(ex2.en),
+        examplePt2: ex2.pt,
+        tip: payload.pedagogicalTip || payload.falseCognateOrLiteralWarning || '',
+        status: 'unseen',
+        origin: 'custom',
+        updatedAt: Date.now(),
+      });
+
+      setCustomCards((prev) => [customCard, ...prev]);
+      void recordCustomCardUpsertOptimistic(customCard);
+      setSelectedStudyIds((prev) => {
+        const next = new Set(prev);
+        if (next.size < MAX_STUDY_CARDS) {
+          next.add(newId);
+          persistWorkspaceOptimistic({ selectedCardIds: Array.from(next) });
+        }
+        return next;
+      });
+      showToast(`"${customCard.term}" salva e adicionada ao seu estudo!`);
+    },
+    [cards, persistWorkspaceOptimistic, showToast]
+  );
+
   const handleOpenCover = useCallback(() => {
     setFocusMode(false);
     setShowCover(true);
@@ -1618,6 +1778,11 @@ export default function App() {
     cardModalCtx.mode === 'custom_for_deck'
       ? userDecks.find((d) => d.id === cardModalCtx.deckId)?.name
       : undefined;
+
+  const officialSchoolCount = useMemo(
+    () => cards.filter((c) => c.origin !== 'custom').length,
+    [cards]
+  );
 
   const masteredCardsCount = useMemo(
     () => cards.filter((c) => c.status === 'mastered').length,
@@ -1743,7 +1908,7 @@ export default function App() {
                   return next;
                 });
               }}
-              onOpenUnifiedLookup={() => setPhoneticModalOpen(true)}
+              onOpenUnifiedLookup={() => setUnifiedLookupOpen(true)}
               onOpenReminderModal={() => setReminderModalOpen(true)}
               onOpenDownloadModal={() => setDownloadModalOpen(true)}
               reminderEnabled={reminderEnabled}
@@ -1771,6 +1936,7 @@ export default function App() {
                   totalCards={cards.length}
                   quizScore={quizScore}
                   cloudLeaderboard={cloudLeaderboard}
+                  recentXpDelta={recentXpDelta}
                   onUpdateGoal={handleUpdateGoal}
                   onOpenRankingModal={() => setRankingModalOpen(true)}
                 />
@@ -1783,6 +1949,7 @@ export default function App() {
                     activeSubMode={activeStudySubMode}
                     decksCount={userDecks.length}
                     totalCards={cards.length}
+                    officialSchoolCount={officialSchoolCount}
                     focusMode={focusMode}
                     onChangeSubMode={(mode) => handleTabChange(mode)}
                   />
@@ -2004,6 +2171,26 @@ export default function App() {
               setEditingCard(null);
             }}
             onSave={handleSaveCard}
+            onSelectExistingCard={(existing) => {
+              setEditingCard(existing);
+              setCardModalCtx({ mode: 'custom' });
+            }}
+            onAutoFeedCandidate={(cand) => {
+              handleAutoFeedSchoolCatalog(cand);
+            }}
+          />
+        </Suspense>
+      )}
+
+      {unifiedLookupOpen && (
+        <Suspense fallback={null}>
+          <LazyLinguisticLookupModal
+            isOpen={unifiedLookupOpen}
+            allCards={cards}
+            selectedStudyIds={selectedStudyIds}
+            onClose={() => setUnifiedLookupOpen(false)}
+            onAddConsultToStudy={handleAddConsultToStudy}
+            onAutoFeedCandidate={handleAutoFeedSchoolCatalog}
           />
         </Suspense>
       )}

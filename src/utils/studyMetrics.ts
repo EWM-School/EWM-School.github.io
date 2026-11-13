@@ -49,7 +49,13 @@ export interface UserStudyStats {
   monthlyStudyMinutes: number;
   currentMonthKey: string; // YYYY-MM
   lastActiveTimestamp: number;
+  todayDiscoveryDate?: string; // YYYY-MM-DD anti-farming cap window
+  todayDiscoveryKeys?: string[]; // canonical keys rewarded today (max 5/day)
+  monthlyDiscoveryBonusXp?: number; // accumulated +2 XP discovery bonuses in current month
 }
+
+export const DISCOVERY_BONUS_XP = 2;
+export const MAX_DAILY_DISCOVERY_BONUSES = 5;
 
 const STORAGE_KEY = 'ewm_v5_study_metrics';
 const LEADERBOARD_CACHE_KEY = 'ewm_v6_leaderboard_cache';
@@ -79,6 +85,9 @@ export function getDefaultStudyStats(d = new Date()): UserStudyStats {
     monthlyStudyMinutes: 0,
     currentMonthKey: getCurrentMonthKey(d),
     lastActiveTimestamp: d.getTime(),
+    todayDiscoveryDate: getTodayDateString(d),
+    todayDiscoveryKeys: [],
+    monthlyDiscoveryBonusXp: 0,
   };
 }
 
@@ -133,6 +142,15 @@ export function loadUserStudyStats(): UserStudyStats {
       currentMonthKey: currentMonth,
       lastActiveTimestamp:
         typeof parsed.lastActiveTimestamp === 'number' ? parsed.lastActiveTimestamp : Date.now(),
+      todayDiscoveryDate: today,
+      todayDiscoveryKeys:
+        parsed.todayDiscoveryDate === today && Array.isArray(parsed.todayDiscoveryKeys)
+          ? parsed.todayDiscoveryKeys.slice(0, MAX_DAILY_DISCOVERY_BONUSES)
+          : [],
+      monthlyDiscoveryBonusXp:
+        parsed.currentMonthKey === currentMonth && typeof parsed.monthlyDiscoveryBonusXp === 'number'
+          ? Math.max(0, Math.floor(parsed.monthlyDiscoveryBonusXp))
+          : 0,
     };
 
     return base;
@@ -271,6 +289,92 @@ export function setDailyGoalInStats(
   return updated;
 }
 
+/**
+ * Anti-Farming Symbolic Discovery Bonus (+2 XP, hard cap of 5 bonuses per user per YYYY-MM-DD day).
+ * From the 6th discovery onward on the same day, returns `awardedXp: 0` while keeping catalog feeding active.
+ */
+export function recordGlobalDiscoveryBonusInStats(
+  canonicalKey: string,
+  current: UserStudyStats,
+  now = new Date()
+): {
+  updatedStats: UserStudyStats;
+  awardedXp: number;
+  dailyCount: number;
+  cappedOut: boolean;
+} {
+  const cleanKey = String(canonicalKey || '').trim().toLowerCase();
+  if (!cleanKey) {
+    return { updatedStats: current, awardedXp: 0, dailyCount: 0, cappedOut: false };
+  }
+
+  const today = getTodayDateString(now);
+  const currentMonth = getCurrentMonthKey(now);
+  const isNewMonth = current.currentMonthKey !== currentMonth;
+  const isNewDiscoveryDay = current.todayDiscoveryDate !== today;
+
+  const existingTodayKeys = isNewDiscoveryDay
+    ? []
+    : [...(current.todayDiscoveryKeys || [])];
+  const baseMonthlyBonus = isNewMonth
+    ? 0
+    : Math.max(0, Math.floor(current.monthlyDiscoveryBonusXp || 0));
+
+  if (existingTodayKeys.includes(cleanKey)) {
+    return {
+      updatedStats: current,
+      awardedXp: 0,
+      dailyCount: existingTodayKeys.length,
+      cappedOut: false,
+    };
+  }
+
+  if (existingTodayKeys.length >= MAX_DAILY_DISCOVERY_BONUSES) {
+    const cappedStats: UserStudyStats = {
+      ...current,
+      todayDate: today,
+      currentMonthKey: currentMonth,
+      todayDiscoveryDate: today,
+      todayDiscoveryKeys: existingTodayKeys,
+      monthlyDiscoveryBonusXp: baseMonthlyBonus,
+      lastActiveTimestamp: now.getTime(),
+    };
+    saveUserStudyStats(cappedStats);
+    return {
+      updatedStats: cappedStats,
+      awardedXp: 0,
+      dailyCount: existingTodayKeys.length,
+      cappedOut: true,
+    };
+  }
+
+  const nextTodayKeys = [...existingTodayKeys, cleanKey];
+  const nextActiveDays = isNewMonth ? [] : [...current.monthlyActiveDays];
+  if (!nextActiveDays.includes(today)) {
+    nextActiveDays.push(today);
+  }
+
+  const updatedStats: UserStudyStats = {
+    ...current,
+    todayDate: today,
+    currentMonthKey: currentMonth,
+    monthlyActiveDays: nextActiveDays,
+    monthlyStudyMinutes: isNewMonth ? 0 : current.monthlyStudyMinutes,
+    todayDiscoveryDate: today,
+    todayDiscoveryKeys: nextTodayKeys,
+    monthlyDiscoveryBonusXp: baseMonthlyBonus + DISCOVERY_BONUS_XP,
+    lastActiveTimestamp: now.getTime(),
+  };
+
+  saveUserStudyStats(updatedStats);
+  return {
+    updatedStats,
+    awardedXp: DISCOVERY_BONUS_XP,
+    dailyCount: nextTodayKeys.length,
+    cappedOut: false,
+  };
+}
+
 export function formatStudyHoursMinutes(minutes: number): string {
   const totalMin = Math.max(0, Math.round(minutes));
   const hours = Math.floor(totalMin / 60);
@@ -372,9 +476,10 @@ export function computeRealStudentMetrics(inputs: RealScoreInputs): {
 
   // Total real cards interacted with (at least mastered + review if progressed earlier)
   const cardsReviewed = Math.max(monthlyUniqueCards, mastered + review);
+  const discoveryBonusXp = Math.max(0, Math.floor(inputs.stats.monthlyDiscoveryBonusXp || 0));
   const activeDays = Math.max(
     inputs.stats.monthlyActiveDays.length,
-    cardsReviewed > 0 || quiz > 0 ? 1 : 0
+    cardsReviewed > 0 || quiz > 0 || discoveryBonusXp > 0 ? 1 : 0
   );
   const studyTimeMinutes = Math.max(0, Math.floor(inputs.stats.monthlyStudyMinutes || 0));
   const minutosEstudados = Math.max(
@@ -388,12 +493,14 @@ export function computeRealStudentMetrics(inputs: RealScoreInputs): {
     cardsReviewed * 10 +
     quiz * 15 +
     (cardsReviewed > 0 || quiz > 0 || studyTimeMinutes > 0 ? activeDays * 50 : 0) +
-    studyTimeMinutes * 2;
+    studyTimeMinutes * 2 +
+    discoveryBonusXp;
 
   let statusText = 'Pronto para iniciar';
   if (mastered >= 20) statusText = `${mastered} expressões dominadas`;
   else if (quiz >= 5) statusText = `${quiz} acertos no Modo Quiz`;
   else if (cardsReviewed > 0) statusText = `${cardsReviewed} cards praticados`;
+  else if (discoveryBonusXp > 0) statusText = 'Expandindo o Acervo EWM';
   else if (studyTimeMinutes > 0) statusText = 'Praticando pronúncia US & UK';
 
   return {

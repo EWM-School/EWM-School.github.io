@@ -11,10 +11,11 @@ import type {
   UserDeck,
 } from '../../types/flashcard';
 import { hydrateCard } from '../../utils/deckHelpers';
+import { toCanonicalExpressionKey, type LinguisticEngineResult } from '../../utils/linguisticNormalizer';
 import { loadUserStudyStats, type UserStudyStats } from '../../utils/studyMetrics';
 
 const DB_NAME = 'ewm_offline_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const PREF_KEYS = {
   workspace: 'ewm_v6_pref_workspace',
@@ -43,7 +44,18 @@ export type SyncQueueAction =
   | 'DECK_DELETE'
   | 'WORKSPACE_SETTINGS_UPDATE'
   | 'QUIZ_SCORE_UPDATE'
-  | 'LEADERBOARD_SCORE_UPSERT';
+  | 'LEADERBOARD_SCORE_UPSERT'
+  | 'LINGUISTIC_CACHE_UPSERT'
+  | 'CURATED_GLOBAL_CARD_UPSERT';
+
+export interface CachedLinguisticRecord {
+  cacheKey: string;
+  canonicalKey: string;
+  mode: 'CONSULT_TRANSLATE' | 'GRAMMAR_CHECK';
+  result: LinguisticEngineResult;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export type SyncQueuePayload =
   | {
@@ -99,6 +111,17 @@ export type SyncQueuePayload =
       studyTimeMinutes: number;
       minutosEstudados: number;
       statusText: string;
+    }
+  | {
+      type: 'LINGUISTIC_CACHE_UPSERT';
+      cacheId: string;
+      mode: 'CONSULT_TRANSLATE' | 'GRAMMAR_CHECK';
+      canonicalKey: string;
+      payloadJson: string;
+    }
+  | {
+      type: 'CURATED_GLOBAL_CARD_UPSERT';
+      card: Flashcard;
     };
 
 export interface SyncQueueItem {
@@ -173,6 +196,14 @@ interface EwmOfflineDbSchema extends DBSchema {
       updatedAt: string;
     };
   };
+  linguistic_cache: {
+    key: string;
+    value: CachedLinguisticRecord;
+  };
+  discovered_school_cards: {
+    key: string;
+    value: Flashcard;
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<EwmOfflineDbSchema>> | null = null;
@@ -199,6 +230,12 @@ function getDb(): Promise<IDBPDatabase<EwmOfflineDbSchema>> {
         }
         if (!db.objectStoreNames.contains('kv_meta')) {
           db.createObjectStore('kv_meta', { keyPath: 'key' });
+        }
+        if (!db.objectStoreNames.contains('linguistic_cache')) {
+          db.createObjectStore('linguistic_cache', { keyPath: 'cacheKey' });
+        }
+        if (!db.objectStoreNames.contains('discovered_school_cards')) {
+          db.createObjectStore('discovered_school_cards', { keyPath: 'id' });
         }
       },
     });
@@ -410,6 +447,7 @@ export async function hydrateOfflineDatabase(): Promise<OfflineHydratedSnapshot>
 
     const [
       globalCards,
+      discoveredSchoolCards,
       customCards,
       decks,
       progressEntries,
@@ -419,6 +457,7 @@ export async function hydrateOfflineDatabase(): Promise<OfflineHydratedSnapshot>
       allQueueItems,
     ] = await Promise.all([
       db.getAll('global_cards'),
+      db.getAll('discovered_school_cards'),
       db.getAll('custom_cards'),
       db.getAll('decks'),
       db.getAll('card_progress'),
@@ -454,8 +493,34 @@ export async function hydrateOfflineDatabase(): Promise<OfflineHydratedSnapshot>
     const studyStats = (statsMeta?.data as UserStudyStats | undefined) ?? legacy.studyStats;
     const pendingQueueCount = allQueueItems.filter((q) => !q.synced).length;
 
+    const mergedGlobalCards: Flashcard[] = [];
+    const seenIds = new Set<string>();
+    const seenCanonical = new Set<string>();
+
+    for (const seedCard of INITIAL_CARDS) {
+      const ck = toCanonicalExpressionKey(seedCard.term);
+      if (ck) seenCanonical.add(ck);
+    }
+
+    for (const gc of globalCards) {
+      if (!gc?.id || seenIds.has(gc.id)) continue;
+      seenIds.add(gc.id);
+      const ck = toCanonicalExpressionKey(gc.term);
+      if (ck) seenCanonical.add(ck);
+      mergedGlobalCards.push(hydrateCard(gc));
+    }
+
+    for (const dc of discoveredSchoolCards) {
+      if (!dc?.id || seenIds.has(dc.id)) continue;
+      const ck = toCanonicalExpressionKey(dc.term);
+      if (ck && seenCanonical.has(ck)) continue;
+      seenIds.add(dc.id);
+      if (ck) seenCanonical.add(ck);
+      mergedGlobalCards.push(hydrateCard({ ...dc, origin: 'global', published: true }));
+    }
+
     return {
-      globalCards: globalCards.map(hydrateCard),
+      globalCards: mergedGlobalCards,
       customCards: customCards.map(hydrateCard),
       decks,
       progressMap,
@@ -565,6 +630,67 @@ export async function saveGlobalCardsCacheLocal(cards: Flashcard[]): Promise<voi
     await tx.done;
   } catch {
     // ignore
+  }
+}
+
+export async function saveDiscoveredSchoolCardLocal(card: Flashcard): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.put('discovered_school_cards', {
+      ...card,
+      origin: 'global',
+      published: true,
+      updatedAt: card.updatedAt ?? Date.now(),
+    });
+  } catch {
+    // ignore
+  }
+}
+
+export async function getDiscoveredSchoolCardsLocal(): Promise<Flashcard[]> {
+  try {
+    const db = await getDb();
+    const items = await db.getAll('discovered_school_cards');
+    return items.map(hydrateCard);
+  } catch {
+    return [];
+  }
+}
+
+export async function getLinguisticCacheLocal(
+  cacheKey: string
+): Promise<CachedLinguisticRecord | null> {
+  if (!cacheKey) return null;
+  try {
+    const db = await getDb();
+    const entry = await db.get('linguistic_cache', cacheKey);
+    return entry ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function putLinguisticCacheLocal(record: CachedLinguisticRecord): Promise<void> {
+  if (!record?.cacheKey) return;
+  try {
+    const db = await getDb();
+    await db.put('linguistic_cache', record);
+  } catch {
+    // ignore
+  }
+}
+
+export async function getRecentLinguisticHistoryLocal(
+  limit = 6
+): Promise<CachedLinguisticRecord[]> {
+  try {
+    const db = await getDb();
+    const all = await db.getAll('linguistic_cache');
+    return all
+      .sort((a, b) => Date.parse(b.updatedAt || '') - Date.parse(a.updatedAt || ''))
+      .slice(0, Math.max(1, limit));
+  } catch {
+    return [];
   }
 }
 

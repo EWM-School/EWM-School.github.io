@@ -1,20 +1,38 @@
-import { AlertCircle, CheckCircle2, Globe, Sparkles, Volume2, Wand2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import {
+  AlertCircle,
+  ArrowLeft,
+  CheckCircle2,
+  ChevronDown,
+  Folder,
+  Loader2,
+  RefreshCw,
+  Sparkles,
+  Tag,
+  Volume2,
+  WifiOff,
+  X,
+} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { VALID_FOLDERS, VALID_SUBTOPICS } from '../data/seedData';
+import type { AutoFeedCandidateInput } from '../services/linguisticEngineClient';
+import { triggerTap } from '../services/platform/hapticsService';
 import type { Flashcard, SubtopicKey, TopicFolder } from '../types/flashcard';
 import {
   generateNewExampleSentence,
+  isAbortError,
+  isLinguisticOfflineError,
   lookupSmartCardContent,
-  type TripleCheckStage,
 } from '../utils/aiLookup';
 import {
   classifyCardSubtopic,
   classifyTermIntoFolder,
   getCardSecondExample,
 } from '../utils/deckHelpers';
-import { auditEnglishGrammarAndCollocations } from '../utils/grammarEngine';
 import {
-  fetchVerifiedPhoneticsForTerm,
+  formatCleanExampleSentence,
+  toCanonicalExpressionKey,
+} from '../utils/linguisticNormalizer';
+import {
   getCardPhonetics,
   synthesizeOfflinePhrasePhonetics,
 } from '../utils/phonetics';
@@ -28,7 +46,11 @@ interface CardModalProps {
   contextSubtitle?: string;
   onClose: () => void;
   onSave: (cardData: Omit<Flashcard, 'id' | 'status'>, existingId?: string) => void;
+  onSelectExistingCard?: (card: Flashcard) => void;
+  onAutoFeedCandidate?: (candidate: AutoFeedCandidateInput) => void;
 }
+
+type ModalStage = 'magic_input' | 'review_form';
 
 export function CardModal({
   isOpen,
@@ -38,820 +60,978 @@ export function CardModal({
   contextSubtitle,
   onClose,
   onSave,
+  onSelectExistingCard,
+  onAutoFeedCandidate,
 }: CardModalProps) {
+  const [stage, setStage] = useState<ModalStage>(editingCard ? 'review_form' : 'magic_input');
+  const [magicQuery, setMagicQuery] = useState('');
+
+  // Core Card Fields (Stage 2)
   const [term, setTerm] = useState('');
-  const [category, setCategory] = useState<TopicFolder>('Frases');
-  const [subtopic, setSubtopic] = useState<SubtopicKey>('Casual');
   const [literal, setLiteral] = useState('');
-  const [colloquialInput, setColloquialInput] = useState('');
-  const [phoneticUs, setPhoneticUs] = useState('');
-  const [phoneticUk, setPhoneticUk] = useState('');
-  const [ukNote, setUkNote] = useState('');
   const [exampleEn, setExampleEn] = useState('');
   const [examplePt, setExamplePt] = useState('');
   const [exampleEn2, setExampleEn2] = useState('');
   const [examplePt2, setExamplePt2] = useState('');
+  const [category, setCategory] = useState<TopicFolder>('Frases');
+  const [subtopic, setSubtopic] = useState<SubtopicKey>('Casual');
+  const [phoneticUs, setPhoneticUs] = useState('');
+  const [phoneticUk, setPhoneticUk] = useState('');
+  const [ukNote, setUkNote] = useState('');
+  const [colloquialList, setColloquialList] = useState<string[]>([]);
   const [tip, setTip] = useState('');
+  const [isEditingTip, setIsEditingTip] = useState(false);
 
-  const [lookupDirection, setLookupDirection] = useState<'en-to-pt' | 'pt-to-en'>('en-to-pt');
-  const [lookupQuery, setLookupQuery] = useState('');
+  // Async & Feedback States
   const [isLookingUp, setIsLookingUp] = useState(false);
-  const [isGeneratingPhonetics, setIsGeneratingPhonetics] = useState(false);
-  const [isGeneratingSentence, setIsGeneratingSentence] = useState<1 | 2 | null>(null);
-  const [checkStage, setCheckStage] = useState<TripleCheckStage>('idle');
-  const [checkMessage, setCheckMessage] = useState('');
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [groundingSources, setGroundingSources] = useState<{ uri: string; title?: string }[]>([]);
+  const [lookupStatusText, setLookupStatusText] = useState('');
+  const [isRegeneratingExample, setIsRegeneratingExample] = useState(false);
+  const [seenExamplesHistory, setSeenExamplesHistory] = useState<string[]>([]);
+  const [offlineErrorMsg, setOfflineErrorMsg] = useState<string | null>(null);
+  const [formErrorMsg, setFormErrorMsg] = useState<string | null>(null);
+  const [shakeError, setShakeError] = useState(false);
+
+  // Race-condition protection refs (`AbortController` + monotonic request IDs)
+  const lookupAbortRef = useRef<AbortController | null>(null);
+  const lookupReqIdRef = useRef(0);
+  const exampleAbortRef = useRef<AbortController | null>(null);
+  const exampleReqIdRef = useRef(0);
+  const magicInputRef = useRef<HTMLInputElement | null>(null);
+
+  const cancelInFlightRequests = useCallback(() => {
+    lookupReqIdRef.current += 1;
+    exampleReqIdRef.current += 1;
+    lookupAbortRef.current?.abort();
+    lookupAbortRef.current = null;
+    exampleAbortRef.current?.abort();
+    exampleAbortRef.current = null;
+    setIsLookingUp(false);
+    setIsRegeneratingExample(false);
+  }, []);
 
   useEffect(() => {
-    if (!isOpen) return;
-    setValidationError(null);
-    setCheckStage('idle');
-    setCheckMessage('');
-    setLookupQuery('');
-    setIsGeneratingSentence(null);
-    setGroundingSources([]);
+    if (!isOpen) {
+      cancelInFlightRequests();
+      stopCurrentAudio();
+      return;
+    }
+
+    cancelInFlightRequests();
+    setOfflineErrorMsg(null);
+    setFormErrorMsg(null);
+    setShakeError(false);
 
     if (editingCard) {
+      const phon = getCardPhonetics(editingCard);
       const sec = getCardSecondExample(editingCard);
-      const resolved = getCardPhonetics(editingCard);
+      setStage('review_form');
+      setMagicQuery(editingCard.term);
       setTerm(editingCard.term);
-      setCategory(editingCard.category);
-      setSubtopic(editingCard.subtopic);
-      setLiteral(resolved.meaning || editingCard.literal);
-      setColloquialInput((editingCard.colloquial || []).join(', '));
-      setPhoneticUs(resolved.us);
-      setPhoneticUk(resolved.uk);
-      setUkNote(resolved.ukNote || '');
+      setLiteral(phon.meaning || editingCard.literal);
       setExampleEn(editingCard.exampleEn);
       setExamplePt(editingCard.examplePt);
-      setExampleEn2(sec.en);
-      setExamplePt2(sec.pt);
+      setExampleEn2(sec.en || editingCard.exampleEn);
+      setExamplePt2(sec.pt || editingCard.examplePt);
+      setCategory(editingCard.category);
+      setSubtopic(editingCard.subtopic || 'Casual');
+      setPhoneticUs(editingCard.phoneticUs || phon.us || '');
+      setPhoneticUk(editingCard.phoneticUk || phon.uk || '');
+      setUkNote(editingCard.ukNote || phon.ukNote || '');
+      setColloquialList(editingCard.colloquial || []);
       setTip(editingCard.tip || '');
+      setIsEditingTip(false);
+      setSeenExamplesHistory(
+        [editingCard.exampleEn, sec.en].filter((x): x is string => Boolean(x))
+      );
     } else {
+      setStage('magic_input');
+      setMagicQuery('');
       setTerm('');
-      setCategory('Frases');
-      setSubtopic('Casual');
       setLiteral('');
-      setColloquialInput('');
-      setPhoneticUs('');
-      setPhoneticUk('');
-      setUkNote('');
       setExampleEn('');
       setExamplePt('');
       setExampleEn2('');
       setExamplePt2('');
+      setCategory('Frases');
+      setSubtopic('Casual');
+      setPhoneticUs('');
+      setPhoneticUk('');
+      setUkNote('');
+      setColloquialList([]);
       setTip('');
+      setIsEditingTip(false);
+      setSeenExamplesHistory([]);
+      window.setTimeout(() => {
+        magicInputRef.current?.focus();
+      }, 40);
     }
-  }, [isOpen, editingCard]);
+  }, [isOpen, editingCard, cancelInFlightRequests]);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    return () => {
+      cancelInFlightRequests();
+      stopCurrentAudio();
+    };
+  }, [cancelInFlightRequests]);
 
-  const handleSmartAutoFill = async (overrideTerm?: string) => {
-    const query = (overrideTerm || lookupQuery || term).trim();
-    if (!query) {
-      setValidationError('Digite uma palavra ou expressão para preencher automaticamente.');
-      return null;
-    }
-    setValidationError(null);
-    setIsLookingUp(true);
-    try {
-      const res = await lookupSmartCardContent(
-        query,
-        lookupDirection,
-        allCards,
-        (stage, msg) => {
-          setCheckStage(stage);
-          setCheckMessage(msg);
-        }
-      );
-      if (res) {
-        setTerm(res.term);
-        setCategory(res.category);
-        setSubtopic(res.subtopic);
-        setLiteral(res.literal);
-        setColloquialInput(res.colloquial.join(', '));
-        setPhoneticUs(res.phoneticUs);
-        setPhoneticUk(res.phoneticUk);
-        setUkNote(res.ukNote || '');
-        if (res.exampleEn) setExampleEn(res.exampleEn);
-        if (res.examplePt) setExamplePt(res.examplePt);
-        if (res.exampleEn2) setExampleEn2(res.exampleEn2);
-        if (res.examplePt2) setExamplePt2(res.examplePt2);
-        setTip(res.tip);
-        if (res.groundingSources && res.groundingSources.length > 0) {
-          setGroundingSources(res.groundingSources);
-        }
-        return res;
-      }
-    } finally {
-      setIsLookingUp(false);
-    }
-    return null;
-  };
+  // 0ms Instant Canonical Anti-Duplicate Detection
+  const duplicateCard = useMemo(() => {
+    const raw = stage === 'magic_input' ? magicQuery : term;
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.length < 2) return null;
 
-  const handleGenerateNewSentence = async (slot: 1 | 2) => {
-    const cleanTerm = term.trim() || lookupQuery.trim();
-    if (!cleanTerm) {
-      setValidationError('Informe a palavra ou expressão em inglês antes de gerar uma nova frase.');
-      return;
-    }
-    setValidationError(null);
-    setIsGeneratingSentence(slot);
-    setCheckStage(2);
-    setCheckMessage(`Buscando nova frase real no Google com Gemini para "${cleanTerm}"...`);
+    const canonical = toCanonicalExpressionKey(trimmed);
+    const lowerRaw = trimmed.toLowerCase();
 
-    try {
-      const currentList = [exampleEn, exampleEn2].filter(Boolean);
-      const res = await generateNewExampleSentence(
-        cleanTerm,
-        currentList,
-        slot,
-        category,
-        literal || colloquialInput
-      );
+    return (
+      allCards.find((c) => {
+        if (editingCard && c.id === editingCard.id) return false;
+        if (canonical && toCanonicalExpressionKey(c.term) === canonical) return true;
+        if (c.literal.toLowerCase().trim() === lowerRaw) return true;
+        return false;
+      }) ?? null
+    );
+  }, [allCards, editingCard, magicQuery, stage, term]);
 
-      if (res && res.exampleEn) {
-        if (slot === 1) {
-          setExampleEn(res.exampleEn);
-          setExamplePt(res.examplePt);
-        } else {
-          setExampleEn2(res.exampleEn);
-          setExamplePt2(res.examplePt);
-        }
-        setCheckStage('done');
-        setCheckMessage(
-          `Nova frase gerada e verificada com sucesso via ${res.sourceLabel}!${
-            res.contextTip ? ` (${res.contextTip})` : ''
-          }`
-        );
-        if (res.groundingSources && res.groundingSources.length > 0) {
-          setGroundingSources(res.groundingSources);
-        }
-      }
-    } catch {
-      setValidationError('Não foi possível gerar uma nova frase no momento.');
-    } finally {
-      setIsGeneratingSentence(null);
-    }
-  };
-
-  const handleGeneratePhonetics = async () => {
-    const clean = term.trim();
-    if (!clean) {
-      setValidationError('Informe a expressão em inglês antes de gerar a fonética US & UK.');
-      return;
-    }
-    setValidationError(null);
-    setIsGeneratingPhonetics(true);
-    try {
-      const verified = await fetchVerifiedPhoneticsForTerm(clean);
-      setPhoneticUs(verified.phoneticUs);
-      setPhoneticUk(verified.phoneticUk);
-      if (verified.ukNote && !ukNote.trim()) {
-        setUkNote(verified.ukNote);
-      }
-    } finally {
-      setIsGeneratingPhonetics(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setValidationError(null);
-
-    let cleanTerm = term.trim();
-    let cleanLiteral = literal.trim();
-    let colList = colloquialInput
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    let cleanEx1En = exampleEn.trim();
-    let cleanEx1Pt = examplePt.trim();
-    let cleanEx2En = exampleEn2.trim();
-    let cleanEx2Pt = examplePt2.trim();
-
-    if (!cleanTerm) {
-      setValidationError('Informe a expressão ou palavra em inglês.');
-      return;
-    }
-
-    // 100% Complete Guarantee: if user didn't fill translations or examples, auto-fill them now
-    if (colList.length === 0 || !cleanEx1En) {
-      const autoRes = await handleSmartAutoFill(cleanTerm);
-      if (autoRes) {
-        cleanTerm = autoRes.term;
-        cleanLiteral = autoRes.literal;
-        colList = autoRes.colloquial;
-        cleanEx1En = autoRes.exampleEn;
-        cleanEx1Pt = autoRes.examplePt;
-        cleanEx2En = autoRes.exampleEn2 || autoRes.exampleEn;
-        cleanEx2Pt = autoRes.examplePt2 || autoRes.examplePt;
-      }
-    }
-
-    if (colList.length === 0) {
-      setValidationError('Informe pelo menos uma tradução coloquial em português.');
-      return;
-    }
-
-    if (!cleanEx1En) {
-      setValidationError('Informe o Exemplo 1 em inglês.');
-      return;
-    }
-
-    if (cleanEx1En.length < 12) {
-      setValidationError('Exemplo 1 deve ter pelo menos 12 caracteres para demonstrar contexto real.');
-      return;
-    }
-    if (cleanEx1En.length > 260) {
-      setValidationError('Exemplo 1 deve ter no máximo 260 caracteres.');
-      return;
-    }
-
-    const audit1 = auditEnglishGrammarAndCollocations(cleanEx1En, cleanTerm);
-    if (!audit1.valid) {
-      setValidationError(`Exemplo 1: ${audit1.reason}`);
-      return;
-    }
-
-    if (cleanEx2En) {
-      if (cleanEx2En.length < 12) {
-        setValidationError('Exemplo 2 deve ter pelo menos 12 caracteres para demonstrar contexto real.');
-        return;
-      }
-      if (cleanEx2En.length > 260) {
-        setValidationError('Exemplo 2 deve ter no máximo 260 caracteres.');
-        return;
-      }
-      const audit2 = auditEnglishGrammarAndCollocations(cleanEx2En, cleanTerm);
-      if (!audit2.valid) {
-        setValidationError(`Exemplo 2: ${audit2.reason}`);
-        return;
-      }
-    } else {
-      cleanEx2En = cleanEx1En;
-      cleanEx2Pt = cleanEx1Pt;
-    }
-
-    const fallbackResolved = getCardPhonetics({
-      id: editingCard?.id || '',
-      term: cleanTerm,
-      literal: cleanLiteral,
-      phoneticUs: phoneticUs.trim() || undefined,
-      phoneticUk: phoneticUk.trim() || undefined,
-      ukNote: ukNote.trim() || undefined,
+  const triggerSubtleShake = useCallback(() => {
+    setShakeError(false);
+    window.requestAnimationFrame(() => {
+      setShakeError(true);
+      window.setTimeout(() => setShakeError(false), 260);
     });
-    const offlineFallback = synthesizeOfflinePhrasePhonetics(cleanTerm);
-    const finalPhoneticUs = phoneticUs.trim() || fallbackResolved.us || offlineFallback.us;
-    const finalPhoneticUk = phoneticUk.trim() || fallbackResolved.uk || offlineFallback.uk;
+  }, []);
+
+  const handleOpenExistingDuplicate = (existing: Flashcard) => {
+    void triggerTap();
+    cancelInFlightRequests();
+    if (onSelectExistingCard) {
+      onSelectExistingCard(existing);
+      return;
+    }
+    const phon = getCardPhonetics(existing);
+    const sec = getCardSecondExample(existing);
+    setTerm(existing.term);
+    setLiteral(phon.meaning || existing.literal);
+    setExampleEn(existing.exampleEn);
+    setExamplePt(existing.examplePt);
+    setExampleEn2(sec.en || existing.exampleEn);
+    setExamplePt2(sec.pt || existing.examplePt);
+    setCategory(existing.category);
+    setSubtopic(existing.subtopic || 'Casual');
+    setPhoneticUs(existing.phoneticUs || phon.us || '');
+    setPhoneticUk(existing.phoneticUk || phon.uk || '');
+    setUkNote(existing.ukNote || phon.ukNote || '');
+    setColloquialList(existing.colloquial || []);
+    setTip(existing.tip || '');
+    setSeenExamplesHistory([existing.exampleEn, sec.en].filter(Boolean));
+    setStage('review_form');
+  };
+
+  const handleMagicAiAutofill = async () => {
+    const query = magicQuery.trim();
+    if (!query) {
+      setFormErrorMsg('Digite uma palavra ou expressão para preencher com IA.');
+      triggerSubtleShake();
+      magicInputRef.current?.focus();
+      return;
+    }
+
+    void triggerTap();
+    setFormErrorMsg(null);
+    setOfflineErrorMsg(null);
+
+    // Cancel any previous lookup or sentence generation
+    lookupAbortRef.current?.abort();
+    exampleAbortRef.current?.abort();
+    const controller = new AbortController();
+    lookupAbortRef.current = controller;
+    const reqId = ++lookupReqIdRef.current;
+
+    setIsLookingUp(true);
+    setLookupStatusText('Consultando significado idiomático e contexto nativo...');
+
+    try {
+      const result = await lookupSmartCardContent(
+        query,
+        'auto',
+        allCards,
+        (_st, msg) => {
+          if (reqId === lookupReqIdRef.current) {
+            setLookupStatusText(msg);
+          }
+        },
+        { signal: controller.signal }
+      );
+
+      if (reqId !== lookupReqIdRef.current || controller.signal.aborted) {
+        return;
+      }
+
+      if (!result) {
+        setFormErrorMsg('Não foi possível identificar essa expressão. Tente reformular.');
+        triggerSubtleShake();
+        return;
+      }
+
+      setTerm(result.term);
+      setLiteral(result.literal);
+      setExampleEn(result.exampleEn);
+      setExamplePt(result.examplePt);
+      setExampleEn2(result.exampleEn2 || result.exampleEn);
+      setExamplePt2(result.examplePt2 || result.examplePt);
+      setCategory(result.category);
+      setSubtopic(result.subtopic);
+      setPhoneticUs(result.phoneticUs || '');
+      setPhoneticUk(result.phoneticUk || '');
+      setUkNote(result.ukNote || '');
+      setColloquialList(result.colloquial.length > 0 ? result.colloquial : [result.literal]);
+      setTip(result.tip || '');
+      setIsEditingTip(false);
+      setSeenExamplesHistory(
+        [result.exampleEn, result.exampleEn2].filter((x): x is string => Boolean(x))
+      );
+      setStage('review_form');
+
+      if (result.isValidForGlobalSchoolDeck && onAutoFeedCandidate) {
+        onAutoFeedCandidate({
+          englishExpression: result.term,
+          primaryTranslation: result.literal,
+          category: result.category,
+          subtopic: result.subtopic,
+          phoneticUs: result.phoneticUs,
+          phoneticUk: result.phoneticUk,
+          ukNote: result.ukNote,
+          colloquial: result.colloquial,
+          exampleEn: result.exampleEn,
+          examplePt: result.examplePt,
+          exampleEn2: result.exampleEn2,
+          examplePt2: result.examplePt2,
+          tip: result.tip,
+          isValidForGlobalSchoolDeck: true,
+        });
+      }
+    } catch (err) {
+      if (isAbortError(err) || reqId !== lookupReqIdRef.current) {
+        return;
+      }
+      if (isLinguisticOfflineError(err)) {
+        setOfflineErrorMsg(err.message);
+      } else {
+        setOfflineErrorMsg(
+          'Instabilidade temporária ao consultar a IA. Tente novamente em instantes ou preencha manualmente.'
+        );
+      }
+    } finally {
+      if (reqId === lookupReqIdRef.current) {
+        setIsLookingUp(false);
+        setLookupStatusText('');
+      }
+    }
+  };
+
+  const handleOpenManualStage = () => {
+    void triggerTap();
+    cancelInFlightRequests();
+    setOfflineErrorMsg(null);
+    setFormErrorMsg(null);
+
+    const seedText = magicQuery.trim();
+    if (seedText && !term) {
+      setTerm(seedText);
+      const guessedFolder = classifyTermIntoFolder(seedText);
+      setCategory(guessedFolder);
+      setSubtopic(
+        classifyCardSubtopic({
+          term: seedText,
+          literal: '',
+          exampleEn: '',
+        })
+      );
+    }
+    setStage('review_form');
+  };
+
+  const handleRegenerateExampleOnly = async () => {
+    const cleanTerm = term.trim();
+    if (!cleanTerm) {
+      setFormErrorMsg('Informe a expressão em inglês antes de gerar outra frase.');
+      triggerSubtleShake();
+      return;
+    }
+
+    void triggerTap();
+    setFormErrorMsg(null);
+    setOfflineErrorMsg(null);
+
+    // Abort any previous sentence request so rapid clicks never race
+    exampleAbortRef.current?.abort();
+    const controller = new AbortController();
+    exampleAbortRef.current = controller;
+    const reqId = ++exampleReqIdRef.current;
+
+    setIsRegeneratingExample(true);
+
+    try {
+      const historyToAvoid = Array.from(
+        new Set([...seenExamplesHistory, exampleEn].filter(Boolean))
+      );
+
+      const generated = await generateNewExampleSentence(
+        cleanTerm,
+        historyToAvoid,
+        1,
+        category,
+        literal.trim(),
+        { signal: controller.signal }
+      );
+
+      if (reqId !== exampleReqIdRef.current || controller.signal.aborted) {
+        return;
+      }
+
+      setExampleEn(generated.exampleEn);
+      setExamplePt(generated.examplePt);
+      setSeenExamplesHistory((prev) =>
+        Array.from(new Set([...prev, generated.exampleEn])).slice(-8)
+      );
+    } catch (err) {
+      if (isAbortError(err) || reqId !== exampleReqIdRef.current) {
+        return;
+      }
+      if (isLinguisticOfflineError(err)) {
+        setOfflineErrorMsg(err.message);
+      } else {
+        setFormErrorMsg('Não foi possível gerar outra frase agora. Tente novamente.');
+      }
+    } finally {
+      if (reqId === exampleReqIdRef.current) {
+        setIsRegeneratingExample(false);
+      }
+    }
+  };
+
+  const handleManualExampleEnChange = (nextVal: string) => {
+    // Cancel any in-flight regeneration so delayed network responses NEVER overwrite manual typing
+    if (exampleAbortRef.current) {
+      exampleReqIdRef.current += 1;
+      exampleAbortRef.current.abort();
+      exampleAbortRef.current = null;
+      setIsRegeneratingExample(false);
+    }
+    setExampleEn(nextVal);
+    if (formErrorMsg) setFormErrorMsg(null);
+  };
+
+  const handleManualExamplePtChange = (nextVal: string) => {
+    if (exampleAbortRef.current) {
+      exampleReqIdRef.current += 1;
+      exampleAbortRef.current.abort();
+      exampleAbortRef.current = null;
+      setIsRegeneratingExample(false);
+    }
+    setExamplePt(nextVal);
+    if (formErrorMsg) setFormErrorMsg(null);
+  };
+
+  const handleSubmitSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormErrorMsg(null);
+
+    const cleanTerm = term.trim();
+    const cleanLiteral = literal.trim();
+    const cleanExEn = formatCleanExampleSentence(exampleEn);
+    const cleanExPt = examplePt.trim();
+
+    if (!cleanTerm) {
+      setFormErrorMsg('Preencha a expressão em inglês.');
+      triggerSubtleShake();
+      return;
+    }
+    if (!cleanLiteral) {
+      setFormErrorMsg('Preencha o significado natural em português.');
+      triggerSubtleShake();
+      return;
+    }
+    if (!cleanExEn || cleanExEn.split(/\s+/).length < 2) {
+      setFormErrorMsg('Inclua uma frase de exemplo natural em inglês.');
+      triggerSubtleShake();
+      return;
+    }
+    if (!cleanExPt) {
+      setFormErrorMsg('Inclua a tradução equivalente da frase em português.');
+      triggerSubtleShake();
+      return;
+    }
+
+    const offlineSynth =
+      !phoneticUs.trim() || !phoneticUk.trim()
+        ? synthesizeOfflinePhrasePhonetics(cleanTerm)
+        : { us: '', uk: '' };
+
+    const finalPhonUs = phoneticUs.trim() || offlineSynth.us;
+    const finalPhonUk = phoneticUk.trim() || offlineSynth.uk;
+    const finalColloquial =
+      colloquialList.length > 0
+        ? colloquialList
+        : cleanLiteral
+            .split(/[,;/]/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+
+    const finalExEn2 = exampleEn2.trim() ? formatCleanExampleSentence(exampleEn2) : cleanExEn;
+    const finalExPt2 = examplePt2.trim() || cleanExPt;
 
     onSave(
       {
         term: cleanTerm,
-        category: category || classifyTermIntoFolder(cleanTerm, editingCard?.id),
-        subtopic:
-          subtopic ||
-          classifyCardSubtopic({ term: cleanTerm, literal: cleanLiteral, exampleEn: cleanEx1En }),
-        literal: cleanLiteral || colList[0],
-        colloquial: colList,
-        phoneticUs: finalPhoneticUs,
-        phoneticUk: finalPhoneticUk,
+        category,
+        subtopic,
+        literal: cleanLiteral,
+        phoneticUs: finalPhonUs || undefined,
+        phoneticUk: finalPhonUk || undefined,
         ukNote: ukNote.trim() || undefined,
-        exampleEn: cleanEx1En,
-        examplePt: cleanEx1Pt || `→ ${colList[0]}`,
-        exampleEn2: cleanEx2En,
-        examplePt2: cleanEx2Pt || cleanEx1Pt,
-        tip: tip.trim() || 'Expressão autêntica com áudio nos sotaques Americano (US) e Britânico (UK).',
-        modified: true,
-        updatedAt: Date.now(),
+        colloquial: finalColloquial.length > 0 ? finalColloquial : [cleanLiteral],
+        exampleEn: cleanExEn,
+        examplePt: cleanExPt,
+        exampleEn2: finalExEn2,
+        examplePt2: finalExPt2,
+        tip:
+          tip.trim() ||
+          'Ouça os áudios US e UK para comparar a pronúncia natural dos nativos.',
       },
       editingCard?.id
     );
   };
 
+  if (!isOpen) return null;
+
+  const modalHeading =
+    contextTitle || (editingCard ? 'Editar Card' : 'Novo Card de Estudo');
+
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/55 backdrop-blur-xs overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-labelledby="card-modal-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
     >
-      <div className="w-full max-w-2xl rounded-3xl border border-[#E4E0D8] dark:border-[#2E332E] bg-white dark:bg-[#212421] shadow-2xl my-auto max-h-[92vh] overflow-y-auto">
-        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-[#ECE9E1] dark:border-[#2A2F2A] bg-white/95 dark:bg-[#212421]/95 backdrop-blur-xs">
-          <div>
-            <h2
-              id="card-modal-title"
-              className="font-display text-lg font-bold text-[#1C1B18] dark:text-[#EBE7DE]"
-            >
-              {contextTitle || (editingCard ? 'Editar Flashcard' : 'Novo Flashcard')}
-            </h2>
+      <div
+        className={`w-full sm:max-w-xl rounded-t-3xl sm:rounded-3xl border border-[#E4E0D8] dark:border-[#2E342F] bg-[#FCFBF8] dark:bg-[#1B1E1B] shadow-2xl overflow-hidden my-auto max-h-[94dvh] flex flex-col ewm-pillar-enter ${
+          shakeError ? 'ewm-micro-shake' : ''
+        }`}
+      >
+        {/* Clean Minimalist Header */}
+        <div className="flex items-center justify-between gap-3 px-5 sm:px-6 py-4 border-b border-[#ECE8DF] dark:border-[#282E29] bg-white/80 dark:bg-[#1E221F]/80">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h2
+                id="card-modal-title"
+                className="font-display font-bold text-base sm:text-lg text-[#1C1B18] dark:text-[#F2EFE8] truncate"
+              >
+                {modalHeading}
+              </h2>
+              {stage === 'review_form' && !editingCard && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void triggerTap();
+                    cancelInFlightRequests();
+                    setOfflineErrorMsg(null);
+                    setFormErrorMsg(null);
+                    setStage('magic_input');
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold text-[#28665E] dark:text-[#38E5A5] bg-[#EAF3F1] dark:bg-[#172A24] hover:opacity-90 cursor-pointer shrink-0"
+                >
+                  <ArrowLeft className="w-3 h-3" />
+                  <span>Nova busca</span>
+                </button>
+              )}
+            </div>
             {contextSubtitle && (
-              <p className="text-xs text-[#28665E] dark:text-[#68B4A8] font-medium mt-0.5">
+              <p className="text-xs text-[#6B655C] dark:text-[#9FA6A0] truncate mt-0.5">
                 {contextSubtitle}
               </p>
             )}
           </div>
+
           <button
             type="button"
             onClick={onClose}
             aria-label="Fechar modal"
-            className="p-2 rounded-xl text-[#6B655C] dark:text-[#AFAAA0] hover:bg-[#F0EDE6] dark:hover:bg-[#292D29] cursor-pointer"
+            className="p-2 rounded-xl text-[#6B655C] dark:text-[#9FA6A0] hover:bg-[#ECE8DF] dark:hover:bg-[#282E29] cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Smart Lookup Helper */}
-          <div className="rounded-2xl border border-[#DCE5E2] dark:border-[#2F4B46] bg-[#F4F8F7] dark:bg-[#1B2926] p-4 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs font-bold text-[#225851] dark:text-[#86CEC2] flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Preenchimento Inteligente (Base EWM + Fonética US &amp; UK)</span>
-              </span>
+        {/* =================================================================
+            ESTÁGIO 1 — ENTRADA ÚNICA MÁGICA (FOCO INICIAL AO ABRIR)
+            ================================================================= */}
+        {stage === 'magic_input' && (
+          <div className="p-5 sm:p-7 space-y-5 overflow-y-auto">
+            <div className="space-y-2">
+              <label
+                htmlFor="card-magic-protagonist-input"
+                className="block text-sm font-semibold text-[#1C1B18] dark:text-[#EBE7DE]"
+              >
+                Qual palavra ou expressão você quer aprender?
+              </label>
 
-              <div className="inline-flex p-0.5 rounded-lg bg-[#E1ECE9] dark:bg-[#243734] text-[11px] font-semibold">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                <input
+                  ref={magicInputRef}
+                  id="card-magic-protagonist-input"
+                  type="text"
+                  value={magicQuery}
+                  disabled={isLookingUp}
+                  onChange={(e) => {
+                    setMagicQuery(e.target.value);
+                    if (formErrorMsg) setFormErrorMsg(null);
+                    if (offlineErrorMsg) setOfflineErrorMsg(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void handleMagicAiAutofill();
+                    }
+                  }}
+                  placeholder="Digite uma palavra ou expressão (em Inglês ou Português)..."
+                  className="flex-1 min-w-0 px-4 py-3.5 rounded-2xl border border-[#D8D3C8] dark:border-[#333B35] bg-white dark:bg-[#222723] text-sm sm:text-[15px] text-[#1C1B18] dark:text-[#F4F2EC] placeholder:text-[#8C857B] dark:placeholder:text-[#7D857F] focus:outline-none focus:border-[#38E5A5] focus:ring-2 focus:ring-[#38E5A5]/20 transition-all"
+                />
+
                 <button
                   type="button"
-                  onClick={() => setLookupDirection('en-to-pt')}
-                  className={`px-2.5 py-1 rounded-md cursor-pointer whitespace-nowrap shrink-0 ${
-                    lookupDirection === 'en-to-pt'
-                      ? 'bg-white dark:bg-[#2A6D63] text-[#1C1B18] dark:text-[#F4F7F6]'
-                      : 'text-[#4E6964] dark:text-[#A4CAC3]'
-                  }`}
+                  disabled={isLookingUp || !magicQuery.trim()}
+                  onClick={() => void handleMagicAiAutofill()}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl bg-[#38E5A5] hover:bg-[#2FD497] disabled:opacity-50 text-[#0B1F17] font-bold text-sm shadow-sm cursor-pointer whitespace-nowrap shrink-0"
                 >
-                  Inglês &rarr; PT
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLookupDirection('pt-to-en')}
-                  className={`px-2.5 py-1 rounded-md cursor-pointer whitespace-nowrap shrink-0 ${
-                    lookupDirection === 'pt-to-en'
-                      ? 'bg-white dark:bg-[#2A6D63] text-[#1C1B18] dark:text-[#F4F7F6]'
-                      : 'text-[#4E6964] dark:text-[#A4CAC3]'
-                  }`}
-                >
-                  PT &rarr; Inglês
+                  {isLookingUp ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Preenchendo...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      <span>✨ Preencher com IA</span>
+                    </>
+                  )}
                 </button>
               </div>
+
+              {isLookingUp && lookupStatusText && (
+                <p className="text-xs text-[#28665E] dark:text-[#38E5A5] font-medium flex items-center gap-1.5 pt-1">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#38E5A5] animate-ping" />
+                  <span>{lookupStatusText}</span>
+                </p>
+              )}
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                type="text"
-                value={lookupQuery}
-                onChange={(e) => setLookupQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    void handleSmartAutoFill();
-                  }
-                }}
-                placeholder={
-                  lookupDirection === 'en-to-pt'
-                    ? 'Ex: figure out, reschedule, no-brainer...'
-                    : 'Ex: dar um jeito, resumir, ficar com pé atrás...'
-                }
-                className="flex-1 px-3.5 py-2 rounded-xl border border-[#D4DFDC] dark:border-[#324D48] bg-white dark:bg-[#212421] text-xs sm:text-sm text-[#1C1B18] dark:text-[#EBE7DE] focus:outline-none focus:ring-2 focus:ring-[#28665E]/30"
-              />
-              <button
-                type="button"
-                onClick={() => void handleSmartAutoFill()}
-                disabled={isLookingUp}
-                className="px-4 py-2 rounded-xl bg-[#28665E] hover:bg-[#1F524B] dark:bg-[#2A6D63] dark:hover:bg-[#327D72] text-white dark:text-[#F4F7F6] text-xs font-semibold disabled:opacity-60 cursor-pointer whitespace-nowrap shrink-0 transition-colors"
-              >
-                {isLookingUp ? 'Consultando...' : 'Preencher'}
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleGenerateNewSentence(exampleEn ? 2 : 1)}
-                disabled={isGeneratingSentence !== null || (!term.trim() && !lookupQuery.trim())}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-[#D4DFDC] dark:border-[#324D48] bg-white dark:bg-[#212421] text-xs font-semibold text-[#28665E] dark:text-[#86CEC2] hover:bg-[#EAF3F1] dark:hover:bg-[#253D39] disabled:opacity-50 cursor-pointer whitespace-nowrap shrink-0 transition-colors"
-                title="Buscar automaticamente nova frase real gerada pelo Gemini no banco de dados do Google"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>{isGeneratingSentence !== null ? 'Pesquisando...' : 'Gerar nova frase'}</span>
-              </button>
-            </div>
-
-            {checkStage !== 'idle' && (
-              <div
-                className={`text-xs flex flex-col gap-1 font-medium ${
-                  checkStage === 'blocked'
-                    ? 'text-[#9A5B13] dark:text-[#E6B472]'
-                    : 'text-[#2C6B4F] dark:text-[#78C9A2]'
-                }`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                  <span>{checkMessage}</span>
-                </div>
-                {groundingSources.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5 pl-5 pt-0.5 text-[11px] text-[#5C574E] dark:text-[#AFAAA0]">
-                    <span className="flex items-center gap-1 font-semibold text-[#28665E] dark:text-[#86CEC2]">
-                      <Globe className="w-3 h-3" />
-                      Google Search Grounding:
+            {/* Instant 0ms Anti-Duplicate Notice */}
+            {duplicateCard && !isLookingUp && (
+              <div className="rounded-2xl border border-[#C6DBD7] dark:border-[#2E4B44] bg-[#F1F8F6] dark:bg-[#162621] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ewm-pillar-enter">
+                <div className="space-y-0.5 min-w-0">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1F564E] dark:text-[#38E5A5]">
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                    <span>Já existe no seu acervo!</span>
+                  </div>
+                  <p className="text-sm font-bold text-[#1C1B18] dark:text-[#F2EFE8] truncate">
+                    {duplicateCard.term}{' '}
+                    <span className="font-normal text-[#5C574E] dark:text-[#A9B0AA]">
+                      — {duplicateCard.literal}
                     </span>
-                    {groundingSources.slice(0, 3).map((s, idx) => (
-                      <a
-                        key={idx}
-                        href={s.uri}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline hover:text-[#28665E] dark:hover:text-[#86CEC2] truncate max-w-[200px]"
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleOpenExistingDuplicate(duplicateCard)}
+                  className="px-3.5 py-2 rounded-xl bg-white dark:bg-[#22332D] border border-[#BFD7D2] dark:border-[#38E5A5]/30 text-xs font-bold text-[#1E4E47] dark:text-[#38E5A5] hover:border-[#38E5A5] cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  Visualizar / Editar card
+                </button>
+              </div>
+            )}
+
+            {/* Honest Offline Reconnection State */}
+            {offlineErrorMsg && (
+              <div className="rounded-2xl border border-[#E6CFC8] dark:border-[#4B2E2B] bg-[#FDF6F4] dark:bg-[#291C1B] p-4 space-y-2.5 ewm-pillar-enter">
+                <div className="flex items-start gap-2.5 text-xs text-[#8C332B] dark:text-[#F3B7B1]">
+                  <WifiOff className="w-4 h-4 shrink-0 mt-0.5" />
+                  <p className="leading-relaxed font-medium">{offlineErrorMsg}</p>
+                </div>
+                <div className="flex items-center gap-2 pl-6">
+                  <button
+                    type="button"
+                    onClick={() => void handleMagicAiAutofill()}
+                    className="px-3 py-1.5 rounded-lg bg-[#8C332B] text-white text-xs font-semibold cursor-pointer"
+                  >
+                    Tentar novamente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenManualStage}
+                    className="px-3 py-1.5 rounded-lg border border-[#D8BEB7] dark:border-[#573835] text-xs font-semibold text-[#6E2822] dark:text-[#F3B7B1] cursor-pointer"
+                  >
+                    Preencher manualmente
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {formErrorMsg && (
+              <div className="rounded-xl border border-[#E6CFC8] dark:border-[#4B2E2B] bg-[#FDF6F4] dark:bg-[#291C1B] px-3.5 py-2.5 text-xs font-medium text-[#8C332B] dark:text-[#F3B7B1] flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{formErrorMsg}</span>
+              </div>
+            )}
+
+            {/* Subtle Secondary Manual Trigger */}
+            <div className="pt-2 border-t border-[#ECE8DF] dark:border-[#262C27] flex items-center justify-between">
+              <button
+                type="button"
+                onClick={handleOpenManualStage}
+                className="text-xs font-medium text-[#6B655C] dark:text-[#9CA39D] hover:text-[#1C1B18] dark:hover:text-[#F2EFE8] underline underline-offset-4 cursor-pointer"
+              >
+                Ou preencher campos manualmente
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-[#6B655C] dark:text-[#9CA39D] hover:bg-[#ECE8DF] dark:hover:bg-[#262C27] cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* =================================================================
+            ESTÁGIO 2 — REVISÃO ESCANEÁVEL EM 3 BLOCOS LIMPOS (180ms)
+            ================================================================= */}
+        {stage === 'review_form' && (
+          <form
+            onSubmit={handleSubmitSave}
+            className="p-5 sm:p-6 space-y-5 overflow-y-auto ewm-pillar-enter"
+          >
+            {/* Anti-duplicate alert when typing manually in Stage 2 */}
+            {duplicateCard && !editingCard && (
+              <div className="rounded-2xl border border-[#C6DBD7] dark:border-[#2E4B44] bg-[#F1F8F6] dark:bg-[#162621] px-3.5 py-2.5 flex items-center justify-between gap-2 text-xs">
+                <span className="text-[#1F564E] dark:text-[#9EE8CD] truncate">
+                  <strong>{duplicateCard.term}</strong> já existe no seu acervo.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleOpenExistingDuplicate(duplicateCard)}
+                  className="font-bold text-[#1E4E47] dark:text-[#38E5A5] underline shrink-0 cursor-pointer"
+                >
+                  Abrir existente
+                </button>
+              </div>
+            )}
+
+            {/* BLOCO 1 — ESSÊNCIA (TERMO & TRADUÇÃO) */}
+            <section className="space-y-3" aria-label="Essência do card">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* Expressão em Inglês + Mini Preview US / UK */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <label
+                      htmlFor="card-term-en"
+                      className="text-xs font-bold uppercase tracking-wider text-[#5C574E] dark:text-[#A3ABA5]"
+                    >
+                      Expressão em Inglês
+                    </label>
+                    <div className="inline-flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        disabled={!term.trim()}
+                        onClick={() => void toggleSpeakEnglishText(term.trim(), 'us')}
+                        title="Ouvir pronúncia americana (US)"
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-[#D8D3C8] dark:border-[#333B35] bg-white dark:bg-[#252B26] text-[10px] font-bold text-[#28665E] dark:text-[#38E5A5] disabled:opacity-40 cursor-pointer"
                       >
-                        {s.title || s.uri}
-                      </a>
-                    ))}
+                        <Volume2 className="w-2.5 h-2.5" />
+                        <span>US</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!term.trim()}
+                        onClick={() => void toggleSpeakEnglishText(term.trim(), 'uk')}
+                        title="Ouvir pronúncia britânica (UK)"
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-[#D8D3C8] dark:border-[#333B35] bg-white dark:bg-[#252B26] text-[10px] font-bold text-[#244B6B] dark:text-[#8CC2F0] disabled:opacity-40 cursor-pointer"
+                      >
+                        <Volume2 className="w-2.5 h-2.5" />
+                        <span>UK</span>
+                      </button>
+                    </div>
+                  </div>
+                  <input
+                    id="card-term-en"
+                    type="text"
+                    value={term}
+                    onChange={(e) => {
+                      setTerm(e.target.value);
+                      if (formErrorMsg) setFormErrorMsg(null);
+                    }}
+                    placeholder="Ex: Call it a day"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#DDD8CE] dark:border-[#323A34] bg-white dark:bg-[#232824] text-sm font-semibold text-[#1C1B18] dark:text-[#F4F2EC] focus:outline-none focus:border-[#38E5A5]"
+                  />
+                </div>
+
+                {/* Significado Natural em Português */}
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="card-meaning-pt"
+                    className="block text-xs font-bold uppercase tracking-wider text-[#5C574E] dark:text-[#A3ABA5]"
+                  >
+                    Significado Natural (PT-BR)
+                  </label>
+                  <input
+                    id="card-meaning-pt"
+                    type="text"
+                    value={literal}
+                    onChange={(e) => {
+                      setLiteral(e.target.value);
+                      if (formErrorMsg) setFormErrorMsg(null);
+                    }}
+                    placeholder="Ex: Encerrar o expediente por hoje"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#DDD8CE] dark:border-[#323A34] bg-white dark:bg-[#232824] text-sm text-[#1C1B18] dark:text-[#F4F2EC] focus:outline-none focus:border-[#38E5A5]"
+                  />
+                </div>
+              </div>
+
+              {/* Compact Discreet 1-Line Usage / Pronunciation Bar (Expandable on click) */}
+              <div className="rounded-xl border border-[#EAE6DD] dark:border-[#29302B] bg-[#F6F4EF]/80 dark:bg-[#202421] px-3 py-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingTip((v) => !v)}
+                  className="w-full flex items-center justify-between gap-2 text-left text-xs text-[#5C574E] dark:text-[#A8B0AA] cursor-pointer"
+                >
+                  <span className="truncate">
+                    {phoneticUs ? (
+                      <span className="font-mono-num text-[#28665E] dark:text-[#68B4A8] mr-2">
+                        US {phoneticUs}
+                        {phoneticUk ? ` · UK ${phoneticUk}` : ''}
+                      </span>
+                    ) : null}
+                    {tip ? (
+                      <span>💡 {tip}</span>
+                    ) : (
+                      <span className="opacity-75">Adicionar dica curta de uso ou pronúncia (opcional)</span>
+                    )}
+                  </span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 shrink-0 transition-transform ${
+                      isEditingTip ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {isEditingTip && (
+                  <div className="pt-2 mt-2 border-t border-[#E5E0D6] dark:border-[#2C332E]">
+                    <input
+                      type="text"
+                      value={tip}
+                      onChange={(e) => setTip(e.target.value)}
+                      placeholder="Ex: Usado ao parar um trabalho ou tarefa pelo resto do dia."
+                      className="w-full px-3 py-2 rounded-lg border border-[#DDD8CE] dark:border-[#323A34] bg-white dark:bg-[#1B1F1C] text-xs text-[#1C1B18] dark:text-[#EBE7DE] focus:outline-none focus:border-[#38E5A5]"
+                    />
                   </div>
                 )}
               </div>
-            )}
-          </div>
+            </section>
 
-          {validationError && (
-            <div className="rounded-xl border border-[#E6B8B5] dark:border-[#5D3330] bg-[#FDF2F2] dark:bg-[#311F1E] px-3.5 py-2.5 text-xs font-medium text-[#8F312B] dark:text-[#F4BCB8] flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{validationError}</span>
-            </div>
-          )}
-
-          {/* Term, Folder, Subtopic */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            <div className="sm:col-span-2 space-y-1">
+            {/* BLOCO 2 — CONTEXTO REAL (CARD ÚNICO DE EXEMPLO + 🔄 OUTRA FRASE) */}
+            <section
+              aria-label="Contexto real de exemplo"
+              className="rounded-2xl border border-[#DFDBD0] dark:border-[#2E3630] bg-white dark:bg-[#212622] p-4 space-y-3"
+            >
               <div className="flex items-center justify-between gap-2">
-                <label
-                  htmlFor="card-term-input"
-                  className="block text-xs font-semibold text-[#5C574E] dark:text-[#AFAAA0]"
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#5C574E] dark:text-[#A3ABA5]">
+                    Contexto Real (Exemplo)
+                  </span>
+                  <div className="inline-flex items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={!exampleEn.trim() || isRegeneratingExample}
+                      onClick={() => void toggleSpeakEnglishText(exampleEn.trim(), 'us')}
+                      title="Ouvir frase em inglês americano (US)"
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold text-[#28665E] dark:text-[#38E5A5] hover:bg-[#EAF3F1] dark:hover:bg-[#1A2E27] disabled:opacity-40 cursor-pointer"
+                    >
+                      <Volume2 className="w-2.5 h-2.5" />
+                      <span>US</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!exampleEn.trim() || isRegeneratingExample}
+                      onClick={() => void toggleSpeakEnglishText(exampleEn.trim(), 'uk')}
+                      title="Ouvir frase em inglês britânico (UK)"
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold text-[#244B6B] dark:text-[#8CC2F0] hover:bg-[#EDF3F8] dark:hover:bg-[#1B2834] disabled:opacity-40 cursor-pointer"
+                    >
+                      <Volume2 className="w-2.5 h-2.5" />
+                      <span>UK</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Single Clean Top-Right Regenerate Button */}
+                <button
+                  type="button"
+                  disabled={isRegeneratingExample || !term.trim()}
+                  onClick={() => void handleRegenerateExampleOnly()}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border border-[#CDE0DC] dark:border-[#38E5A5]/30 bg-[#F2F9F7] dark:bg-[#172A24] text-xs font-semibold text-[#1E524A] dark:text-[#38E5A5] hover:border-[#38E5A5] disabled:opacity-45 cursor-pointer shrink-0"
                 >
-                  Expressão / Palavra (EN) *
-                </label>
-                <div className="inline-flex items-center gap-1">
-                  <button
-                    type="button"
-                    disabled={!term.trim()}
-                    onClick={() => void toggleSpeakEnglishText(term.trim(), 'us')}
-                    aria-label="Testar pronúncia em inglês americano"
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#EAF3F1] dark:bg-[#1E312E] text-[11px] font-semibold text-[#28665E] dark:text-[#86CEC2] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0"
-                  >
-                    <Volume2 className="w-3 h-3" />
-                    <span>Ouvir US</span>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!term.trim()}
-                    onClick={() => void toggleSpeakEnglishText(term.trim(), 'uk')}
-                    aria-label="Testar pronúncia em inglês britânico"
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#EDF1F5] dark:bg-[#1E2630] text-[11px] font-semibold text-[#243B53] dark:text-[#9CC3E6] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0"
-                  >
-                    <Volume2 className="w-3 h-3" />
-                    <span>Ouvir UK</span>
-                  </button>
+                  <RefreshCw
+                    className={`w-3.5 h-3.5 ${isRegeneratingExample ? 'animate-spin' : ''}`}
+                  />
+                  <span>{isRegeneratingExample ? 'Gerando...' : 'Outra frase'}</span>
+                </button>
+              </div>
+
+              {isRegeneratingExample ? (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="space-y-2.5 py-2 animate-pulse"
+                >
+                  <div className="h-9 w-full rounded-xl bg-[#ECE8DF] dark:bg-[#2B322D]" />
+                  <div className="h-9 w-5/6 rounded-xl bg-[#F2EFE8] dark:bg-[#262C28]" />
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  <div>
+                    <label htmlFor="card-example-en" className="sr-only">
+                      Frase de exemplo em inglês
+                    </label>
+                    <textarea
+                      id="card-example-en"
+                      rows={2}
+                      value={exampleEn}
+                      onChange={(e) => handleManualExampleEnChange(e.target.value)}
+                      placeholder="Frase natural em inglês aplicando a expressão..."
+                      className="w-full px-3.5 py-2 rounded-xl border border-[#E4E0D8] dark:border-[#313832] bg-[#FAF9F6] dark:bg-[#1B1F1C] text-sm font-medium text-[#1C1B18] dark:text-[#F4F2EC] resize-none focus:outline-none focus:border-[#38E5A5]"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="card-example-pt" className="sr-only">
+                      Tradução natural da frase em português
+                    </label>
+                    <textarea
+                      id="card-example-pt"
+                      rows={2}
+                      value={examplePt}
+                      onChange={(e) => handleManualExamplePtChange(e.target.value)}
+                      placeholder="Tradução idiomática equivalente em português..."
+                      className="w-full px-3.5 py-2 rounded-xl border border-[#E4E0D8] dark:border-[#313832] bg-[#FAF9F6] dark:bg-[#1B1F1C] text-xs sm:text-sm text-[#5C574E] dark:text-[#C5CBC6] resize-none focus:outline-none focus:border-[#38E5A5]"
+                    />
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* BLOCO 3 — ORGANIZAÇÃO INTELIGENTE COMPACTA (PASTA & SUBTÓPICO OFICIAIS) */}
+            <section className="space-y-3" aria-label="Organização em Pasta e Subtópico">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#5C574E] dark:text-[#A3ABA5]">
+                  <Folder className="w-3.5 h-3.5 text-[#28665E] dark:text-[#38E5A5]" />
+                  <span>Pasta</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {VALID_FOLDERS.map((folder) => {
+                    const active = category === folder;
+                    return (
+                      <button
+                        key={folder}
+                        type="button"
+                        onClick={() => {
+                          void triggerTap();
+                          setCategory(folder);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold border cursor-pointer ${
+                          active
+                            ? 'bg-[#1E4E47] dark:bg-[#38E5A5]/18 border-[#1E4E47] dark:border-[#38E5A5] text-white dark:text-[#38E5A5]'
+                            : 'bg-white dark:bg-[#222723] border-[#DFDBD0] dark:border-[#313832] text-[#5C574E] dark:text-[#B4BBB5] hover:border-[#28665E]'
+                        }`}
+                      >
+                        {folder}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-              <input
-                id="card-term-input"
-                type="text"
-                required
-                value={term}
-                onChange={(e) => setTerm(e.target.value)}
-                placeholder="Ex: Wrap up"
-                className="w-full px-3.5 py-2 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-sm text-[#1C1B18] dark:text-[#EBE7DE] focus:outline-none focus:ring-2 focus:ring-[#28665E]/30"
-              />
-            </div>
 
-            <div className="space-y-1">
-              <label
-                htmlFor="card-topic-select"
-                className="block text-xs font-semibold text-[#5C574E] dark:text-[#AFAAA0]"
-              >
-                Tópico
-              </label>
-              <select
-                id="card-topic-select"
-                value={category}
-                onChange={(e) => setCategory(e.target.value as TopicFolder)}
-                className="w-full px-3 py-2 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-sm text-[#1C1B18] dark:text-[#EBE7DE]"
-              >
-                {VALID_FOLDERS.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label
-                htmlFor="card-subtopic-select"
-                className="block text-xs font-semibold text-[#5C574E] dark:text-[#AFAAA0]"
-              >
-                Subtópico
-              </label>
-              <select
-                id="card-subtopic-select"
-                value={subtopic}
-                onChange={(e) => setSubtopic(e.target.value as SubtopicKey)}
-                className="w-full px-3 py-2 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-sm text-[#1C1B18] dark:text-[#EBE7DE]"
-              >
-                {VALID_SUBTOPICS.map((st) => (
-                  <option key={st.key} value={st.key}>
-                    {st.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label
-                htmlFor="card-colloquial-input"
-                className="block text-xs font-semibold text-[#5C574E] dark:text-[#AFAAA0]"
-              >
-                Traduções Coloquiais (separadas por vírgula) *
-              </label>
-              <input
-                id="card-colloquial-input"
-                type="text"
-                required
-                value={colloquialInput}
-                onChange={(e) => setColloquialInput(e.target.value)}
-                placeholder="Ex: Encerrar, Fechar com chave de ouro"
-                className="w-full px-3.5 py-2 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-sm text-[#1C1B18] dark:text-[#EBE7DE]"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label
-                htmlFor="card-literal-input"
-                className="block text-xs font-semibold text-[#5C574E] dark:text-[#AFAAA0]"
-              >
-                Sentido Literal / Contexto Base
-              </label>
-              <input
-                id="card-literal-input"
-                type="text"
-                value={literal}
-                onChange={(e) => setLiteral(e.target.value)}
-                placeholder="Ex: Embrulhar / Concluir uma atividade"
-                className="w-full px-3.5 py-2 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-sm text-[#1C1B18] dark:text-[#EBE7DE]"
-              />
-            </div>
-          </div>
-
-          {/* Dual Native Phonetics (EWM-US & EWM-UK) */}
-          <div className="rounded-2xl border border-[#ECE9E1] dark:border-[#303630] bg-[#FAF9F6] dark:bg-[#1B1E1B] p-4 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h3 className="text-xs font-bold text-[#1C1B18] dark:text-[#EBE7DE]">
-                  Pacote Fonético Nativo (EWM-US &amp; EWM-UK)
-                </h3>
-                <p className="text-[11px] text-[#6B655C] dark:text-[#AFAAA0]">
-                  Se deixar em branco, o sistema gera automaticamente as duas transcrições verificadas ao salvar.
-                </p>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#5C574E] dark:text-[#A3ABA5]">
+                  <Tag className="w-3.5 h-3.5 text-[#28665E] dark:text-[#38E5A5]" />
+                  <span>Subtópico</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {VALID_SUBTOPICS.map((sub) => {
+                    const active = subtopic === sub.key;
+                    return (
+                      <button
+                        key={sub.key}
+                        type="button"
+                        onClick={() => {
+                          void triggerTap();
+                          setSubtopic(sub.key);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold border cursor-pointer ${
+                          active
+                            ? 'bg-[#EAF3F1] dark:bg-[#213831] border-[#28665E] dark:border-[#38E5A5]/70 text-[#1C4B44] dark:text-[#7CECC2]'
+                            : 'bg-white dark:bg-[#222723] border-[#DFDBD0] dark:border-[#313832] text-[#5C574E] dark:text-[#B4BBB5] hover:border-[#28665E]'
+                        }`}
+                      >
+                        {sub.shortLabel || sub.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+            </section>
+
+            {/* Offline or Validation Feedback */}
+            {offlineErrorMsg && (
+              <div className="rounded-xl border border-[#E6CFC8] dark:border-[#4B2E2B] bg-[#FDF6F4] dark:bg-[#291C1B] px-3.5 py-2.5 text-xs font-medium text-[#8C332B] dark:text-[#F3B7B1] flex items-center gap-2">
+                <WifiOff className="w-4 h-4 shrink-0" />
+                <span>{offlineErrorMsg}</span>
+              </div>
+            )}
+
+            {formErrorMsg && (
+              <div className="rounded-xl border border-[#E6CFC8] dark:border-[#4B2E2B] bg-[#FDF6F4] dark:bg-[#291C1B] px-3.5 py-2.5 text-xs font-medium text-[#8C332B] dark:text-[#F3B7B1] flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{formErrorMsg}</span>
+              </div>
+            )}
+
+            {/* CLEAN ACTION FOOTER */}
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#ECE8DF] dark:border-[#282E29]">
               <button
                 type="button"
-                onClick={() => void handleGeneratePhonetics()}
-                disabled={isGeneratingPhonetics || !term.trim()}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#D4DFDC] dark:border-[#2F4B46] bg-white dark:bg-[#262A26] text-xs font-semibold text-[#28665E] dark:text-[#86CEC2] hover:border-[#28665E] dark:hover:border-[#68B4A8] disabled:opacity-50 cursor-pointer whitespace-nowrap shrink-0"
+                onClick={onClose}
+                className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-[#6B655C] dark:text-[#A3ABA5] hover:bg-[#ECE8DF] dark:hover:bg-[#272D28] cursor-pointer"
               >
-                <Wand2 className="w-3.5 h-3.5" />
-                <span>{isGeneratingPhonetics ? 'Verificando...' : 'Gerar fonética US & UK'}</span>
+                Cancelar
+              </button>
+
+              <button
+                type="submit"
+                disabled={isRegeneratingExample}
+                className="px-6 py-2.5 rounded-xl bg-[#38E5A5] hover:bg-[#2FD497] disabled:opacity-50 text-[#0B1F17] text-xs sm:text-sm font-bold shadow-sm cursor-pointer"
+              >
+                Salvar Card
               </button>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label
-                  htmlFor="card-phonetic-us"
-                  className="block text-xs font-semibold text-[#5C574E] dark:text-[#AFAAA0]"
-                >
-                  Pronúncia US (EWM-US)
-                </label>
-                <input
-                  id="card-phonetic-us"
-                  type="text"
-                  value={phoneticUs}
-                  onChange={(e) => setPhoneticUs(e.target.value)}
-                  placeholder="Ex: /ri-SKÉ-djul/ ou /rép ÂP/"
-                  className="w-full px-3 py-2 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] bg-white dark:bg-[#262A26] text-xs sm:text-sm font-mono-num text-[#1C1B18] dark:text-[#EBE7DE]"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label
-                  htmlFor="card-phonetic-uk"
-                  className="block text-xs font-semibold text-[#5C574E] dark:text-[#AFAAA0]"
-                >
-                  Pronúncia UK (EWM-UK)
-                </label>
-                <input
-                  id="card-phonetic-uk"
-                  type="text"
-                  value={phoneticUk}
-                  onChange={(e) => setPhoneticUk(e.target.value)}
-                  placeholder="Ex: /ri-XÉ-diul/ ou /rép ÂP/"
-                  className="w-full px-3 py-2 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] bg-white dark:bg-[#262A26] text-xs sm:text-sm font-mono-num text-[#1C1B18] dark:text-[#EBE7DE]"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label
-                htmlFor="card-uk-note"
-                className="block text-xs font-semibold text-[#5C574E] dark:text-[#AFAAA0]"
-              >
-                Nota / Equivalente Britânico (UK — opcional)
-              </label>
-              <input
-                id="card-uk-note"
-                type="text"
-                value={ukNote}
-                onChange={(e) => setUkNote(e.target.value)}
-                placeholder="Ex: No Reino Unido também é comum dizer 'Take it with a pinch of salt'."
-                className="w-full px-3 py-2 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] bg-white dark:bg-[#262A26] text-xs sm:text-sm text-[#1C1B18] dark:text-[#EBE7DE]"
-              />
-            </div>
-          </div>
-
-          {/* Examples Pair 1 */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <label
-                  htmlFor="card-example1-en"
-                  className="block text-xs font-semibold text-[#5C574E] dark:text-[#AFAAA0]"
-                >
-                  Exemplo 1 (Inglês) *
-                </label>
-                <div className="inline-flex items-center gap-1">
-                  <button
-                    type="button"
-                    disabled={isGeneratingSentence !== null || !term.trim()}
-                    onClick={() => void handleGenerateNewSentence(1)}
-                    title="Buscar automaticamente nova frase real gerada pelo Gemini no banco de dados do Google"
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#EAF3F1] dark:bg-[#1E312E] text-[10px] font-semibold text-[#28665E] dark:text-[#86CEC2] hover:bg-[#D8EAE6] dark:hover:bg-[#253D39] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0 transition-colors"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    <span>{isGeneratingSentence === 1 ? 'Gerando...' : 'Gerar nova frase'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!exampleEn.trim()}
-                    onClick={() => void toggleSpeakEnglishText(exampleEn.trim(), 'us')}
-                    aria-label="Ouvir Exemplo 1 em inglês americano"
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#28665E] dark:hover:text-[#86CEC2] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0"
-                  >
-                    <Volume2 className="w-3 h-3" />
-                    <span>US</span>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!exampleEn.trim()}
-                    onClick={() => void toggleSpeakEnglishText(exampleEn.trim(), 'uk')}
-                    aria-label="Ouvir Exemplo 1 em inglês britânico"
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#243B53] dark:hover:text-[#9CC3E6] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0"
-                  >
-                    <Volume2 className="w-3 h-3" />
-                    <span>UK</span>
-                  </button>
-                </div>
-              </div>
-              <textarea
-                id="card-example1-en"
-                rows={2}
-                required
-                value={exampleEn}
-                onChange={(e) => setExampleEn(e.target.value)}
-                placeholder="Ex: Let's wrap up this meeting before lunch."
-                className="w-full px-3.5 py-2 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-xs sm:text-sm text-[#1C1B18] dark:text-[#EBE7DE]"
-              />
-            </div>
-            <div className="space-y-1">
-              <label
-                htmlFor="card-example1-pt"
-                className="block text-xs font-semibold text-[#5C574E] dark:text-[#AFAAA0]"
-              >
-                Tradução Natural 1 (PT-BR) *
-              </label>
-              <textarea
-                id="card-example1-pt"
-                rows={2}
-                required
-                value={examplePt}
-                onChange={(e) => setExamplePt(e.target.value)}
-                placeholder="Ex: Vamos encerrar essa reunião antes do almoço."
-                className="w-full px-3.5 py-2 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-xs sm:text-sm text-[#1C1B18] dark:text-[#EBE7DE]"
-              />
-            </div>
-          </div>
-
-          {/* Examples Pair 2 */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <label
-                  htmlFor="card-example2-en"
-                  className="block text-xs font-semibold text-[#5C574E] dark:text-[#AFAAA0]"
-                >
-                  Exemplo 2 (Inglês — opcional)
-                </label>
-                <div className="inline-flex items-center gap-1">
-                  <button
-                    type="button"
-                    disabled={isGeneratingSentence !== null || !term.trim()}
-                    onClick={() => void handleGenerateNewSentence(2)}
-                    title="Buscar automaticamente nova frase 2 gerada pelo Gemini no banco de dados do Google"
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#EAF3F1] dark:bg-[#1E312E] text-[10px] font-semibold text-[#28665E] dark:text-[#86CEC2] hover:bg-[#D8EAE6] dark:hover:bg-[#253D39] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0 transition-colors"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    <span>{isGeneratingSentence === 2 ? 'Gerando...' : 'Gerar nova frase 2'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!exampleEn2.trim()}
-                    onClick={() => void toggleSpeakEnglishText(exampleEn2.trim(), 'us')}
-                    aria-label="Ouvir Exemplo 2 em inglês americano"
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#28665E] dark:hover:text-[#86CEC2] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0"
-                  >
-                    <Volume2 className="w-3 h-3" />
-                    <span>US</span>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!exampleEn2.trim()}
-                    onClick={() => void toggleSpeakEnglishText(exampleEn2.trim(), 'uk')}
-                    aria-label="Ouvir Exemplo 2 em inglês britânico"
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#243B53] dark:hover:text-[#9CC3E6] disabled:opacity-40 cursor-pointer whitespace-nowrap shrink-0"
-                  >
-                    <Volume2 className="w-3 h-3" />
-                    <span>UK</span>
-                  </button>
-                </div>
-              </div>
-              <textarea
-                id="card-example2-en"
-                rows={2}
-                value={exampleEn2}
-                onChange={(e) => setExampleEn2(e.target.value)}
-                placeholder="Ex: We wrapped up the project two days early."
-                className="w-full px-3.5 py-2 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-xs sm:text-sm text-[#1C1B18] dark:text-[#EBE7DE]"
-              />
-            </div>
-            <div className="space-y-1">
-              <label
-                htmlFor="card-example2-pt"
-                className="block text-xs font-semibold text-[#5C574E] dark:text-[#AFAAA0]"
-              >
-                Tradução Natural 2 (PT-BR)
-              </label>
-              <textarea
-                id="card-example2-pt"
-                rows={2}
-                value={examplePt2}
-                onChange={(e) => setExamplePt2(e.target.value)}
-                placeholder="Ex: A gente finalizou o projeto dois dias antes."
-                className="w-full px-3.5 py-2 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-xs sm:text-sm text-[#1C1B18] dark:text-[#EBE7DE]"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <label
-              htmlFor="card-tip-input"
-              className="block text-xs font-semibold text-[#5C574E] dark:text-[#AFAAA0]"
-            >
-              Dica de Uso / Contexto
-            </label>
-            <input
-              id="card-tip-input"
-              type="text"
-              value={tip}
-              onChange={(e) => setTip(e.target.value)}
-              placeholder="Ex: Muito usado para encerrar reuniões ou tarefas no trabalho."
-              className="w-full px-3.5 py-2 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] bg-[#FAF9F6] dark:bg-[#292D29] text-sm text-[#1C1B18] dark:text-[#EBE7DE]"
-            />
-          </div>
-
-          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#ECE9E1] dark:border-[#2A2F2A]">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-[#E4E0D8] dark:border-[#343A34] text-xs font-semibold text-[#5C574E] dark:text-[#AFAAA0] hover:text-[#1C1B18] dark:hover:text-[#F4F7F6] cursor-pointer whitespace-nowrap shrink-0"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2 rounded-xl bg-[#28665E] hover:bg-[#1F524B] dark:bg-[#2A6D63] dark:hover:bg-[#327D72] text-white dark:text-[#F4F7F6] text-xs font-semibold cursor-pointer whitespace-nowrap shrink-0"
-            >
-              {editingCard ? 'Salvar Alterações' : 'Criar Flashcard'}
-            </button>
-          </div>
-        </form>
+          </form>
+        )}
       </div>
     </div>
   );

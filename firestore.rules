@@ -466,5 +466,56 @@ service cloud.firestore {
         incoming().updatedAt == request.time;
       allow delete: if (isVerifiedUser() && isValidId(userId) && request.auth.uid == userId) || isAdmin();
     }
+
+    // 5. Collective Linguistic Cache (/linguisticCache/{cacheId}) — Shared L2 lookup cache across students
+    function isValidLinguisticCacheEntry(data, cacheId) {
+      return isValidId(cacheId) &&
+        data.keys().hasAll([
+          'id', 'mode', 'canonicalKey', 'payloadJson', 'authorId', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'mode', 'canonicalKey', 'payloadJson', 'authorId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id == cacheId &&
+        data.mode is string &&
+        data.mode in ['CONSULT_TRANSLATE', 'GRAMMAR_CHECK'] &&
+        data.canonicalKey is string &&
+        data.canonicalKey.size() >= 1 &&
+        data.canonicalKey.size() <= 160 &&
+        data.payloadJson is string &&
+        data.payloadJson.size() >= 10 &&
+        data.payloadJson.size() <= 12000 &&
+        data.authorId == request.auth.uid &&
+        isValidId(data.authorId) &&
+        data.updatedAt is timestamp;
+    }
+
+    match /linguisticCache/{cacheId} {
+      allow get: if isValidId(cacheId);
+      allow list: if false;
+      allow create: if isVerifiedUser() &&
+        isValidLinguisticCacheEntry(incoming(), cacheId) &&
+        (!('createdAt' in incoming()) || incoming().createdAt == request.time) &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidLinguisticCacheEntry(incoming(), cacheId) &&
+        incoming().updatedAt == request.time;
+      allow delete: if isVerifiedUser() && isValidId(cacheId) && isAdmin();
+    }
+
+    // 6. Auto-Curated School Catalog (/globalCatalog/{cardId}) — "Professor Invisível" unified school expressions
+    match /globalCatalog/{cardId} {
+      allow get: if isValidId(cardId) && ((resource != null && existing().published == true) || isAdmin());
+      allow list: if existing().published == true;
+      allow create: if isVerifiedUser() &&
+        isValidGlobalCard(incoming(), cardId) &&
+        incoming().authorId == request.auth.uid &&
+        incoming().published == true &&
+        incoming().archived == false &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidGlobalCard(incoming(), cardId) && isAdmin();
+      allow delete: if isVerifiedUser() && isValidId(cardId) && isAdmin();
+    }
   }
 }

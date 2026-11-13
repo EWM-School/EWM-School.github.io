@@ -58,6 +58,11 @@ import {
   sanitizeDeckFieldsForFirestore,
   sanitizeWorkspaceFieldsForFirestore,
 } from '../utils/deckHelpers';
+import {
+  enforceDeterministicGrammarVerdict,
+  toCanonicalExpressionKey,
+  type LinguisticEngineResult,
+} from '../utils/linguisticNormalizer';
 import type { CloudLeaderboardRecord } from '../utils/studyMetrics';
 
 export const BOOTSTRAPPED_ADMIN_EMAIL = 'igordesouzaar@gmail.com';
@@ -877,41 +882,186 @@ export async function revokeCoAdminByUid(targetUid: string): Promise<void> {
 }
 
 /**
+ * Collective Linguistic Cache (/linguisticCache/{cacheId}) & Curated Global Catalog (/globalCatalog/{cardId})
+ */
+export async function fetchCollectiveLinguisticCacheFromCloud(
+  cacheId: string
+): Promise<LinguisticEngineResult | null> {
+  if (!isValidFirestoreId(cacheId)) return null;
+  try {
+    const snap = await getDoc(doc(db, 'linguisticCache', cacheId));
+    if (!snap.exists()) return null;
+    const data = snap.data();
+    if (typeof data.payloadJson !== 'string' || data.payloadJson.length < 20) {
+      return null;
+    }
+    const parsed = JSON.parse(data.payloadJson) as LinguisticEngineResult;
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    if (parsed.mode === 'GRAMMAR_CHECK') {
+      return {
+        ...parsed,
+        verdict: enforceDeterministicGrammarVerdict({
+          detectedErrors: parsed.detectedErrors,
+          isStiltedOrTruncated: parsed.isStiltedOrTruncated,
+          rawVerdict: parsed.verdict,
+        }),
+        cacheLayer: 'L2_FIRESTORE',
+      };
+    }
+
+    if (parsed.mode === 'CONSULT_TRANSLATE') {
+      return {
+        ...parsed,
+        cacheLayer: 'L2_FIRESTORE',
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export async function upsertCollectiveLinguisticCacheInCloud(
+  uid: string,
+  params: {
+    cacheId: string;
+    mode: 'CONSULT_TRANSLATE' | 'GRAMMAR_CHECK';
+    canonicalKey: string;
+    payloadJson: string;
+  }
+): Promise<void> {
+  if (
+    !isValidFirestoreId(uid) ||
+    !isValidFirestoreId(params.cacheId) ||
+    params.payloadJson.length < 20 ||
+    params.payloadJson.length > 25000
+  ) {
+    return;
+  }
+
+  const ref = doc(db, 'linguisticCache', params.cacheId);
+  try {
+    const snap = await getDoc(ref);
+    if (snap.exists()) return;
+
+    await setDoc(ref, {
+      cacheId: params.cacheId,
+      mode: params.mode,
+      canonicalKey: String(params.canonicalKey || '').slice(0, 180) || 'query',
+      payloadJson: params.payloadJson,
+      createdBy: uid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    if (isPermissionDeniedError(error) || isLikelyNetworkOfflineError(error)) {
+      return;
+    }
+    handleFirestoreError(error, OperationType.WRITE, `linguisticCache/${params.cacheId}`);
+  }
+}
+
+export async function publishCuratedSchoolCardInCloud(
+  uid: string,
+  card: Flashcard
+): Promise<void> {
+  if (!isValidFirestoreId(uid) || !isValidFirestoreId(card.id)) return;
+  const canonicalKey = toCanonicalExpressionKey(card.term);
+  if (!canonicalKey || canonicalKey.length < 2 || canonicalKey.length > 100) return;
+
+  const ref = doc(db, 'globalCatalog', card.id);
+  const fields = sanitizeCardFieldsForFirestore(card);
+
+  try {
+    const snap = await getDoc(ref);
+    if (snap.exists()) return;
+
+    await setDoc(ref, {
+      id: card.id,
+      canonicalKey,
+      discoveredBy: uid,
+      ...fields,
+      published: true,
+      archived: false,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    if (isPermissionDeniedError(error) || isLikelyNetworkOfflineError(error)) {
+      return;
+    }
+    handleFirestoreError(error, OperationType.WRITE, `globalCatalog/${card.id}`);
+  }
+}
+
+/**
  * Real-time Listeners
  */
 export function subscribeGlobalCards(onCards: (cards: Flashcard[]) => void): Unsubscribe {
   const path = 'globalCards';
-  const q = query(collection(db, 'globalCards'), where('published', '==', true));
-  return onSnapshot(
-    q,
+  let adminCards: Flashcard[] = [];
+  let catalogCards: Flashcard[] = [];
+
+  const emitMerged = () => {
+    const merged: Flashcard[] = [];
+    const seenIds = new Set<string>();
+    const seenCanonical = new Set<string>();
+
+    for (const ac of adminCards) {
+      if (!ac.id || seenIds.has(ac.id)) continue;
+      seenIds.add(ac.id);
+      const ck = toCanonicalExpressionKey(ac.term);
+      if (ck) seenCanonical.add(ck);
+      merged.push(ac);
+    }
+
+    for (const cc of catalogCards) {
+      if (!cc.id || seenIds.has(cc.id)) continue;
+      const ck = toCanonicalExpressionKey(cc.term);
+      if (ck && seenCanonical.has(ck)) continue;
+      seenIds.add(cc.id);
+      if (ck) seenCanonical.add(ck);
+      merged.push(cc);
+    }
+
+    onCards(merged);
+  };
+
+  const mapDocToGlobalCard = (d: { id: string; data: () => Record<string, unknown> }): Flashcard => {
+    const data = d.data();
+    return {
+      id: String(data.id || d.id),
+      term: String(data.term || ''),
+      category: data.category as Flashcard['category'],
+      subtopic: data.subtopic as Flashcard['subtopic'],
+      literal: String(data.literal || ''),
+      phoneticUs: typeof data.phoneticUs === 'string' ? data.phoneticUs : undefined,
+      phoneticUk: typeof data.phoneticUk === 'string' ? data.phoneticUk : undefined,
+      ukNote: typeof data.ukNote === 'string' ? data.ukNote : undefined,
+      colloquial: Array.isArray(data.colloquial) ? (data.colloquial as string[]) : [],
+      exampleEn: String(data.exampleEn || ''),
+      examplePt: String(data.examplePt || ''),
+      exampleEn2: String(data.exampleEn2 || ''),
+      examplePt2: String(data.examplePt2 || ''),
+      tip: String(data.tip || ''),
+      status: 'unseen',
+      origin: 'global',
+      published: Boolean(data.published),
+      archived: Boolean(data.archived),
+      authorId: String(data.authorId || data.discoveredBy || ''),
+      modified: true,
+      updatedAt: extractTimestampMs(data.updatedAt),
+    };
+  };
+
+  const qAdmin = query(collection(db, 'globalCards'), where('published', '==', true));
+  const unsubAdmin = onSnapshot(
+    qAdmin,
     (snap) => {
-      const items: Flashcard[] = snap.docs.map((d) => {
-        const data = d.data();
-        return {
-          id: String(data.id || d.id),
-          term: String(data.term || ''),
-          category: data.category,
-          subtopic: data.subtopic,
-          literal: String(data.literal || ''),
-          phoneticUs: typeof data.phoneticUs === 'string' ? data.phoneticUs : undefined,
-          phoneticUk: typeof data.phoneticUk === 'string' ? data.phoneticUk : undefined,
-          ukNote: typeof data.ukNote === 'string' ? data.ukNote : undefined,
-          colloquial: Array.isArray(data.colloquial) ? data.colloquial : [],
-          exampleEn: String(data.exampleEn || ''),
-          examplePt: String(data.examplePt || ''),
-          exampleEn2: String(data.exampleEn2 || ''),
-          examplePt2: String(data.examplePt2 || ''),
-          tip: String(data.tip || ''),
-          status: 'unseen',
-          origin: 'global',
-          published: Boolean(data.published),
-          archived: Boolean(data.archived),
-          authorId: String(data.authorId || ''),
-          modified: true,
-          updatedAt: extractTimestampMs(data.updatedAt),
-        };
-      });
-      onCards(items);
+      adminCards = snap.docs.map(mapDocToGlobalCard);
+      emitMerged();
     },
     (error) => {
       if (!isLikelyNetworkOfflineError(error)) {
@@ -919,6 +1069,25 @@ export function subscribeGlobalCards(onCards: (cards: Flashcard[]) => void): Uns
       }
     }
   );
+
+  const qCatalog = query(collection(db, 'globalCatalog'), where('published', '==', true));
+  const unsubCatalog = onSnapshot(
+    qCatalog,
+    (snap) => {
+      catalogCards = snap.docs.map(mapDocToGlobalCard);
+      emitMerged();
+    },
+    (error) => {
+      if (!isLikelyNetworkOfflineError(error) && !isPermissionDeniedError(error)) {
+        console.warn('Global catalog listener warning:', error);
+      }
+    }
+  );
+
+  return () => {
+    unsubAdmin();
+    unsubCatalog();
+  };
 }
 
 export function subscribeGrantedAdmins(
