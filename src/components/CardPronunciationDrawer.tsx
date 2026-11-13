@@ -3,7 +3,6 @@ import {
   Mic,
   Square,
   Play,
-  Volume2,
   X,
   RotateCcw,
   WifiOff,
@@ -14,6 +13,7 @@ import {
 import type { EnglishAccent, Flashcard } from '../types/flashcard';
 import { useAcousticRecorder } from '../hooks/useAcousticRecorder';
 import {
+  getAudioButtonVisualState,
   getSelectedVoiceLocale,
   stopCurrentAudio,
   subscribeAudioPlayback,
@@ -22,6 +22,7 @@ import {
   type ActiveAudioPlayback,
 } from '../services/platform/speechService';
 import { triggerError, triggerSuccess, triggerTap } from '../services/platform/hapticsService';
+import { AudioStatusIcon, AudioWaveIcon } from './CardAudioControls';
 import type {
   PronunciationEvaluationResult,
   WordBreakdownItem,
@@ -158,13 +159,22 @@ export const CardPronunciationDrawer = memo(function CardPronunciationDrawer({
     switchVoiceLocale(next);
   }, []);
 
+  const targetRole: 'term' | 'sentence' = targetKind === 'example' ? 'sentence' : 'term';
+
   const handleListenNative = useCallback(
-    (textToSpeak: string) => {
+    (
+      textToSpeak: string,
+      opts?: { sourceId?: string; role?: 'term' | 'sentence' }
+    ) => {
       void triggerTap();
       stopOwnPlayback();
-      void toggleSpeakEnglishText(textToSpeak, accentUi, { speed: 'normal' });
+      void toggleSpeakEnglishText(textToSpeak, accentUi, {
+        speed: 'normal',
+        role: opts?.role ?? targetRole,
+        sourceId: opts?.sourceId,
+      });
     },
-    [accentUi, stopOwnPlayback]
+    [accentUi, stopOwnPlayback, targetRole]
   );
 
   if (!session || !card) return null;
@@ -172,11 +182,18 @@ export const CardPronunciationDrawer = memo(function CardPronunciationDrawer({
   const isRecording = status === 'recording';
   const isEvaluating = status === 'evaluating';
   const isRequestingMic = status === 'requesting_mic';
-  const isPlayingNativeTarget = Boolean(
-    activeAudio &&
-      activeAudio.accent === accentUi &&
-      activeAudio.text.toLowerCase() === targetText.toLowerCase()
-  );
+  const listenTopState = getAudioButtonVisualState(activeAudio, {
+    text: targetText,
+    accent: accentUi,
+    sourceId: 'drawer-listen-native',
+  });
+  const listenCompareState = getAudioButtonVisualState(activeAudio, {
+    text: targetText,
+    accent: accentUi,
+    sourceId: 'drawer-compare-native',
+  });
+  const stateMotionClass = (st: 'idle' | 'loading' | 'playing') =>
+    st === 'loading' ? 'ewm-audio-loading' : st === 'playing' ? 'ewm-audio-playing' : '';
 
   const activeWordItem: WordBreakdownItem | null =
     evaluation &&
@@ -317,16 +334,35 @@ export const CardPronunciationDrawer = memo(function CardPronunciationDrawer({
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => handleListenNative(targetText)}
+            aria-pressed={listenTopState !== 'idle'}
+            aria-busy={listenTopState === 'loading'}
+            onClick={() =>
+              handleListenNative(targetText, {
+                sourceId: 'drawer-listen-native',
+                role: targetRole,
+              })
+            }
             title="Ouvir modelo nativo antes de gravar"
-            className={`min-h-[42px] inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
-              isPlayingNativeTarget
+            className={`min-h-[42px] inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${stateMotionClass(
+              listenTopState
+            )} ${
+              listenTopState !== 'idle'
                 ? 'bg-[#28665E] text-white border-[#28665E]'
                 : 'bg-white dark:bg-[#232824] border-[#D6D1C7] dark:border-[#343A34] text-[#28665E] dark:text-[#86CEC2] hover:bg-[#EAF3F1] dark:hover:bg-[#283834]'
             }`}
           >
-            <Volume2 className="w-3.5 h-3.5 shrink-0" />
-            <span>{isPlayingNativeTarget ? 'Ouvindo...' : 'Ouvir Nativo'}</span>
+            <AudioStatusIcon
+              state={listenTopState}
+              idleClassName="w-3.5 h-3.5 shrink-0"
+              activeClassName="w-3.5 h-3"
+            />
+            <span>
+              {listenTopState === 'loading'
+                ? 'Carregando...'
+                : listenTopState === 'playing'
+                ? 'Ouvindo...'
+                : 'Ouvir Nativo'}
+            </span>
           </button>
 
           <button
@@ -482,16 +518,29 @@ export const CardPronunciationDrawer = memo(function CardPronunciationDrawer({
                   ? '🟡'
                   : '🔴';
 
+              const chipId = `drawer-word-chip-${idx}`;
+              const chipState = getAudioButtonVisualState(activeAudio, {
+                text: item.word,
+                accent: accentUi,
+                sourceId: chipId,
+              });
+
               return (
                 <button
                   key={`${item.word}-${idx}`}
                   type="button"
+                  aria-pressed={chipState !== 'idle'}
                   onClick={() => {
                     setSelectedWordIdx(idx);
-                    handleListenNative(item.word);
+                    handleListenNative(item.word, {
+                      sourceId: chipId,
+                      role: 'term',
+                    });
                   }}
                   title="Toque para ouvir esta palavra e ver a dica fonética"
-                  className={`min-h-[32px] inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${chipTone} ${
+                  className={`min-h-[32px] inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${chipTone} ${stateMotionClass(
+                    chipState
+                  )} ${
                     isSelected ? 'ring-2 ring-[#28665E]/50 dark:ring-[#68B4A8]/60' : ''
                   }`}
                 >
@@ -528,6 +577,7 @@ export const CardPronunciationDrawer = memo(function CardPronunciationDrawer({
         <div className="grid grid-cols-2 gap-2 pt-0.5">
           <button
             type="button"
+            aria-pressed={isPlayingOwnAudio}
             onClick={() => {
               void triggerTap();
               togglePlayOwnRecording();
@@ -535,24 +585,49 @@ export const CardPronunciationDrawer = memo(function CardPronunciationDrawer({
             data-testid="play-own-voice-btn"
             className={`min-h-[40px] inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
               isPlayingOwnAudio
-                ? 'bg-[#1C1B18] text-white border-[#1C1B18] dark:bg-[#EBE7DE] dark:text-[#1C1B18]'
+                ? 'ewm-audio-playing bg-[#1C1B18] text-white border-[#1C1B18] dark:bg-[#EBE7DE] dark:text-[#1C1B18]'
                 : 'bg-[#FAF8F4] hover:bg-[#F0EDE6] dark:bg-[#252A26] dark:hover:bg-[#2E342F] border-[#DFDAD0] dark:border-[#343A34] text-[#1C1B18] dark:text-[#EBE7DE]'
             }`}
           >
-            <span>{isPlayingOwnAudio ? 'Ouvindo minha voz...' : '▶️ Minha Voz'}</span>
+            {isPlayingOwnAudio ? (
+              <AudioWaveIcon className="w-3 h-3" />
+            ) : (
+              <Play className="w-3.5 h-3.5 shrink-0 fill-current" />
+            )}
+            <span>{isPlayingOwnAudio ? 'Ouvindo minha voz...' : 'Minha Voz'}</span>
           </button>
 
           <button
             type="button"
-            onClick={() => handleListenNative(targetText)}
+            aria-pressed={listenCompareState !== 'idle'}
+            aria-busy={listenCompareState === 'loading'}
+            onClick={() =>
+              handleListenNative(targetText, {
+                sourceId: 'drawer-compare-native',
+                role: targetRole,
+              })
+            }
             data-testid="play-native-compare-btn"
-            className={`min-h-[40px] inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
-              isPlayingNativeTarget
+            className={`min-h-[40px] inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${stateMotionClass(
+              listenCompareState
+            )} ${
+              listenCompareState !== 'idle'
                 ? 'bg-[#28665E] text-white border-[#28665E]'
                 : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1D302D] dark:hover:bg-[#253D39] border-[#C2DAD5] dark:border-[#2F4B46] text-[#1E4E47] dark:text-[#86CEC2]'
             }`}
           >
-            <span>{isPlayingNativeTarget ? 'Ouvindo nativo...' : '🔊 Ouvir Nativo'}</span>
+            <AudioStatusIcon
+              state={listenCompareState}
+              idleClassName="w-3.5 h-3.5 shrink-0"
+              activeClassName="w-3 h-3"
+            />
+            <span>
+              {listenCompareState === 'loading'
+                ? 'Carregando...'
+                : listenCompareState === 'playing'
+                ? 'Ouvindo nativo...'
+                : 'Ouvir Nativo'}
+            </span>
           </button>
         </div>
       )}

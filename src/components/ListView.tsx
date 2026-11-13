@@ -5,12 +5,12 @@ import {
   Edit3,
   LayoutGrid,
   List as ListIcon,
+  MessageSquareQuote,
   Mic,
   MicOff,
   Search,
   Shuffle,
   Trash2,
-  Volume2,
   X,
 } from 'lucide-react';
 import {
@@ -30,12 +30,18 @@ import { exportCardsToCsv, getCardSecondExample } from '../utils/deckHelpers';
 import { getCardPhonetics } from '../utils/phonetics';
 import {
   cleanSpeechSearchQuery,
+  getAudioButtonVisualState,
+  getSelectedVoiceLocale,
   isSpeechRecognitionSupported,
   startVoiceSearch,
+  stopCurrentAudio,
   toggleSpeakEnglishText,
+  type ActiveAudioPlayback,
   type SpeechRecognitionController,
 } from '../services/platform/speechService';
+import { useAudioPlaybackState } from '../hooks/useAudioPlaybackState';
 import { triggerTap } from '../services/platform/hapticsService';
+import { AudioStatusIcon } from './CardAudioControls';
 import {
   CardPronunciationDrawer,
   type CardPronunciationSession,
@@ -46,6 +52,7 @@ interface CompactCardRowProps {
   card: Flashcard;
   isSelected: boolean;
   selOrder: number | null;
+  activeAudio: ActiveAudioPlayback | null;
   onToggleCardSelection: (cardId: string) => void;
   onEditCard: (card: Flashcard) => void;
   onDeleteCard: (card: Flashcard) => void;
@@ -56,12 +63,31 @@ const CompactCardRow = memo(function CompactCardRow({
   card,
   isSelected,
   selOrder,
+  activeAudio,
   onToggleCardSelection,
   onEditCard,
   onDeleteCard,
   onOpenPronunciation,
 }: CompactCardRowProps) {
   const phonetics = getCardPhonetics(card);
+  const usSourceId = `list-compact-${card.id}-us`;
+  const ukSourceId = `list-compact-${card.id}-uk`;
+  const exSourceId = `list-compact-${card.id}-ex`;
+
+  const usState = getAudioButtonVisualState(activeAudio, {
+    text: card.term,
+    accent: 'us',
+    sourceId: usSourceId,
+  });
+  const ukState = getAudioButtonVisualState(activeAudio, {
+    text: card.term,
+    accent: 'uk',
+    sourceId: ukSourceId,
+  });
+  const exState = getAudioButtonVisualState(activeAudio, {
+    text: card.exampleEn,
+    sourceId: exSourceId,
+  });
 
   return (
     <div
@@ -119,26 +145,95 @@ const CompactCardRow = memo(function CompactCardRow({
       <div className="flex items-center gap-1 shrink-0 select-none">
         <button
           type="button"
-          onClick={() => void toggleSpeakEnglishText(card.term, 'us')}
-          title="Ouvir em Inglês Americano (US)"
+          aria-pressed={usState !== 'idle'}
+          aria-busy={usState === 'loading'}
+          onClick={(e) => {
+            e.stopPropagation();
+            void triggerTap();
+            void toggleSpeakEnglishText(card.term, 'us', {
+              role: 'term',
+              sourceId: usSourceId,
+            });
+          }}
+          title="Ouvir expressão em Inglês Americano (US)"
           aria-label={`Ouvir ${card.term} em inglês americano`}
-          className="min-h-[40px] lg:min-h-[30px] inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[11px] font-semibold text-[#225851] dark:text-[#86CEC2] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+          className={`min-h-[40px] lg:min-h-[30px] inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+            usState === 'loading'
+              ? 'ewm-audio-loading'
+              : usState === 'playing'
+              ? 'ewm-audio-playing'
+              : ''
+          } ${
+            usState !== 'idle'
+              ? 'bg-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
+              : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[#225851] dark:text-[#86CEC2]'
+          }`}
         >
-          <Volume2 className="w-3 h-3" />
+          <AudioStatusIcon state={usState} idleClassName="w-3 h-3 shrink-0" activeClassName="w-3 h-2.5" />
           <span>US</span>
         </button>
         <button
           type="button"
+          aria-pressed={ukState !== 'idle'}
+          aria-busy={ukState === 'loading'}
           onClick={(e) => {
             e.stopPropagation();
-            void toggleSpeakEnglishText(card.term, 'uk');
+            void triggerTap();
+            void toggleSpeakEnglishText(card.term, 'uk', {
+              role: 'term',
+              sourceId: ukSourceId,
+            });
           }}
-          title="Ouvir em Inglês Britânico (UK)"
+          title="Ouvir expressão em Inglês Britânico (UK)"
           aria-label={`Ouvir ${card.term} em inglês britânico`}
-          className="min-h-[40px] lg:min-h-[30px] inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#EDF1F5] hover:bg-[#DFE6EE] dark:bg-[#1E2630] dark:hover:bg-[#26313E] text-[11px] font-semibold text-[#243B53] dark:text-[#9CC3E6] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+          className={`min-h-[40px] lg:min-h-[30px] inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+            ukState === 'loading'
+              ? 'ewm-audio-loading'
+              : ukState === 'playing'
+              ? 'ewm-audio-playing'
+              : ''
+          } ${
+            ukState !== 'idle'
+              ? 'bg-[#243B53] text-white dark:bg-[#2E4C6B] dark:text-[#F4F7F8]'
+              : 'bg-[#EDF1F5] hover:bg-[#DFE6EE] dark:bg-[#1E2630] dark:hover:bg-[#26313E] text-[#243B53] dark:text-[#9CC3E6]'
+          }`}
         >
-          <Volume2 className="w-3 h-3" />
+          <AudioStatusIcon state={ukState} idleClassName="w-3 h-3 shrink-0" activeClassName="w-3 h-2.5" />
           <span>UK</span>
+        </button>
+        <button
+          type="button"
+          aria-pressed={exState !== 'idle'}
+          aria-busy={exState === 'loading'}
+          onClick={(e) => {
+            e.stopPropagation();
+            void triggerTap();
+            void toggleSpeakEnglishText(card.exampleEn, getSelectedVoiceLocale(), {
+              role: 'sentence',
+              sourceId: exSourceId,
+            });
+          }}
+          title={`Ouvir frase de exemplo completa: "${card.exampleEn}"`}
+          aria-label={`Ouvir frase de exemplo de ${card.term}`}
+          className={`min-h-[40px] lg:min-h-[30px] inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+            exState === 'loading'
+              ? 'ewm-audio-loading'
+              : exState === 'playing'
+              ? 'ewm-audio-playing'
+              : ''
+          } ${
+            exState !== 'idle'
+              ? 'bg-[#1C1B18] text-[#F6F4EF] dark:bg-[#EBE7DE] dark:text-[#181A18]'
+              : 'bg-[#F3F1EC] hover:bg-[#E7E3DA] dark:bg-[#282C28] dark:hover:bg-[#313631] text-[#4A463F] dark:text-[#C5C0B5]'
+          }`}
+        >
+          <AudioStatusIcon
+            state={exState}
+            idleClassName="w-3 h-3 shrink-0"
+            activeClassName="w-3 h-2.5"
+            idleIcon={<MessageSquareQuote className="w-3 h-3 shrink-0" />}
+          />
+          <span>Frase</span>
         </button>
         <button
           type="button"
@@ -155,7 +250,10 @@ const CompactCardRow = memo(function CompactCardRow({
         </button>
         <button
           type="button"
-          onClick={() => onEditCard(card)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onEditCard(card);
+          }}
           title="Editar"
           aria-label={`Editar ${card.term}`}
           className="min-w-[40px] min-h-[40px] lg:min-w-[32px] lg:min-h-[32px] inline-flex items-center justify-center rounded-lg text-[#6B655C] dark:text-[#AFAAA0] hover:text-[#1C1B18] dark:hover:text-[#F4F7F6] hover:bg-[#F0EDE6] dark:hover:bg-[#292D29] cursor-pointer"
@@ -164,7 +262,10 @@ const CompactCardRow = memo(function CompactCardRow({
         </button>
         <button
           type="button"
-          onClick={() => onDeleteCard(card)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDeleteCard(card);
+          }}
           title="Excluir"
           aria-label={`Excluir ${card.term}`}
           className="min-w-[40px] min-h-[40px] lg:min-w-[32px] lg:min-h-[32px] inline-flex items-center justify-center rounded-lg text-[#6B655C] dark:text-[#AFAAA0] hover:text-[#B5443C] dark:hover:text-[#E58982] hover:bg-[#FDF2F2] dark:hover:bg-[#322120] cursor-pointer"
@@ -180,6 +281,7 @@ interface GridCardItemProps {
   card: Flashcard;
   isSelected: boolean;
   selOrder: number | null;
+  activeAudio: ActiveAudioPlayback | null;
   onToggleCardSelection: (cardId: string) => void;
   onUpdateCardCategory: (cardId: string, category: TopicFolder) => void;
   onUpdateCardSubtopic: (cardId: string, subtopic: SubtopicKey) => void;
@@ -192,6 +294,7 @@ const GridCardItem = memo(function GridCardItem({
   card,
   isSelected,
   selOrder,
+  activeAudio,
   onToggleCardSelection,
   onUpdateCardCategory,
   onUpdateCardSubtopic,
@@ -201,6 +304,47 @@ const GridCardItem = memo(function GridCardItem({
 }: GridCardItemProps) {
   const sec = getCardSecondExample(card);
   const phonetics = getCardPhonetics(card);
+
+  const termUsId = `list-grid-${card.id}-term-us`;
+  const termUkId = `list-grid-${card.id}-term-uk`;
+  const ex1UsId = `list-grid-${card.id}-ex1-us`;
+  const ex1UkId = `list-grid-${card.id}-ex1-uk`;
+  const ex2UsId = `list-grid-${card.id}-ex2-us`;
+  const ex2UkId = `list-grid-${card.id}-ex2-uk`;
+
+  const termUsState = getAudioButtonVisualState(activeAudio, {
+    text: card.term,
+    accent: 'us',
+    sourceId: termUsId,
+  });
+  const termUkState = getAudioButtonVisualState(activeAudio, {
+    text: card.term,
+    accent: 'uk',
+    sourceId: termUkId,
+  });
+  const ex1UsState = getAudioButtonVisualState(activeAudio, {
+    text: card.exampleEn,
+    accent: 'us',
+    sourceId: ex1UsId,
+  });
+  const ex1UkState = getAudioButtonVisualState(activeAudio, {
+    text: card.exampleEn,
+    accent: 'uk',
+    sourceId: ex1UkId,
+  });
+  const ex2UsState = getAudioButtonVisualState(activeAudio, {
+    text: sec.en,
+    accent: 'us',
+    sourceId: ex2UsId,
+  });
+  const ex2UkState = getAudioButtonVisualState(activeAudio, {
+    text: sec.en,
+    accent: 'uk',
+    sourceId: ex2UkId,
+  });
+
+  const stateMotionClass = (st: 'idle' | 'loading' | 'playing') =>
+    st === 'loading' ? 'ewm-audio-loading' : st === 'playing' ? 'ewm-audio-playing' : '';
 
   return (
     <article
@@ -301,25 +445,60 @@ const GridCardItem = memo(function GridCardItem({
             <div className="inline-flex items-center gap-1 shrink-0 select-none">
               <button
                 type="button"
-                onClick={() => void toggleSpeakEnglishText(card.term, 'us')}
-                title="Ouvir em Inglês Americano (US)"
+                aria-pressed={termUsState !== 'idle'}
+                aria-busy={termUsState === 'loading'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void triggerTap();
+                  void toggleSpeakEnglishText(card.term, 'us', {
+                    role: 'term',
+                    sourceId: termUsId,
+                  });
+                }}
+                title="Ouvir expressão em Inglês Americano (US)"
                 aria-label={`Ouvir ${card.term} em inglês americano`}
-                className="min-h-[38px] lg:min-h-[28px] inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[11px] font-semibold text-[#225851] dark:text-[#86CEC2] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                className={`min-h-[38px] lg:min-h-[28px] inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${stateMotionClass(
+                  termUsState
+                )} ${
+                  termUsState !== 'idle'
+                    ? 'bg-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
+                    : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[#225851] dark:text-[#86CEC2]'
+                }`}
               >
-                <Volume2 className="w-3 h-3" />
+                <AudioStatusIcon
+                  state={termUsState}
+                  idleClassName="w-3 h-3 shrink-0"
+                  activeClassName="w-3 h-2.5"
+                />
                 <span>US</span>
               </button>
               <button
                 type="button"
+                aria-pressed={termUkState !== 'idle'}
+                aria-busy={termUkState === 'loading'}
                 onClick={(e) => {
                   e.stopPropagation();
-                  void toggleSpeakEnglishText(card.term, 'uk');
+                  void triggerTap();
+                  void toggleSpeakEnglishText(card.term, 'uk', {
+                    role: 'term',
+                    sourceId: termUkId,
+                  });
                 }}
-                title="Ouvir em Inglês Britânico (UK)"
+                title="Ouvir expressão em Inglês Britânico (UK)"
                 aria-label={`Ouvir ${card.term} em inglês britânico`}
-                className="min-h-[38px] lg:min-h-[28px] inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#EDF1F5] hover:bg-[#DFE6EE] dark:bg-[#1E2630] dark:hover:bg-[#26313E] text-[11px] font-semibold text-[#243B53] dark:text-[#9CC3E6] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                className={`min-h-[38px] lg:min-h-[28px] inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${stateMotionClass(
+                  termUkState
+                )} ${
+                  termUkState !== 'idle'
+                    ? 'bg-[#243B53] text-white dark:bg-[#2E4C6B] dark:text-[#F4F7F8]'
+                    : 'bg-[#EDF1F5] hover:bg-[#DFE6EE] dark:bg-[#1E2630] dark:hover:bg-[#26313E] text-[#243B53] dark:text-[#9CC3E6]'
+                }`}
               >
-                <Volume2 className="w-3 h-3" />
+                <AudioStatusIcon
+                  state={termUkState}
+                  idleClassName="w-3 h-3 shrink-0"
+                  activeClassName="w-3 h-2.5"
+                />
                 <span>UK</span>
               </button>
               <button
@@ -366,20 +545,60 @@ const GridCardItem = memo(function GridCardItem({
             <div className="inline-flex items-center gap-1 shrink-0 select-none">
               <button
                 type="button"
-                onClick={() => void toggleSpeakEnglishText(card.exampleEn, 'us')}
+                aria-pressed={ex1UsState !== 'idle'}
+                aria-busy={ex1UsState === 'loading'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void triggerTap();
+                  void toggleSpeakEnglishText(card.exampleEn, 'us', {
+                    role: 'sentence',
+                    sourceId: ex1UsId,
+                  });
+                }}
                 aria-label={`Ouvir frase 1 de ${card.term} em inglês americano`}
-                className="min-h-[30px] lg:min-h-[24px] inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md bg-[#EAF3F1] dark:bg-[#1E312E] text-[10px] font-semibold text-[#225851] dark:text-[#86CEC2] hover:opacity-85 whitespace-nowrap shrink-0 cursor-pointer"
+                title="Ouvir frase completa 1 em Inglês Americano (US)"
+                className={`min-h-[30px] lg:min-h-[24px] inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-semibold whitespace-nowrap shrink-0 cursor-pointer transition-colors ${stateMotionClass(
+                  ex1UsState
+                )} ${
+                  ex1UsState !== 'idle'
+                    ? 'bg-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
+                    : 'bg-[#EAF3F1] dark:bg-[#1E312E] text-[#225851] dark:text-[#86CEC2] hover:opacity-85'
+                }`}
               >
-                <Volume2 className="w-2.5 h-2.5" />
+                <AudioStatusIcon
+                  state={ex1UsState}
+                  idleClassName="w-2.5 h-2.5 shrink-0"
+                  activeClassName="w-2.5 h-2.5"
+                />
                 <span>US</span>
               </button>
               <button
                 type="button"
-                onClick={() => void toggleSpeakEnglishText(card.exampleEn, 'uk')}
+                aria-pressed={ex1UkState !== 'idle'}
+                aria-busy={ex1UkState === 'loading'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void triggerTap();
+                  void toggleSpeakEnglishText(card.exampleEn, 'uk', {
+                    role: 'sentence',
+                    sourceId: ex1UkId,
+                  });
+                }}
                 aria-label={`Ouvir frase 1 de ${card.term} em inglês britânico`}
-                className="min-h-[30px] lg:min-h-[24px] inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md bg-[#EDF1F5] dark:bg-[#1E2630] text-[10px] font-semibold text-[#243B53] dark:text-[#9CC3E6] hover:opacity-85 whitespace-nowrap shrink-0 cursor-pointer"
+                title="Ouvir frase completa 1 em Inglês Britânico (UK)"
+                className={`min-h-[30px] lg:min-h-[24px] inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-semibold whitespace-nowrap shrink-0 cursor-pointer transition-colors ${stateMotionClass(
+                  ex1UkState
+                )} ${
+                  ex1UkState !== 'idle'
+                    ? 'bg-[#243B53] text-white dark:bg-[#2E4C6B] dark:text-[#F4F7F8]'
+                    : 'bg-[#EDF1F5] dark:bg-[#1E2630] text-[#243B53] dark:text-[#9CC3E6] hover:opacity-85'
+                }`}
               >
-                <Volume2 className="w-2.5 h-2.5" />
+                <AudioStatusIcon
+                  state={ex1UkState}
+                  idleClassName="w-2.5 h-2.5 shrink-0"
+                  activeClassName="w-2.5 h-2.5"
+                />
                 <span>UK</span>
               </button>
             </div>
@@ -392,20 +611,60 @@ const GridCardItem = memo(function GridCardItem({
             <div className="inline-flex items-center gap-1 shrink-0 select-none">
               <button
                 type="button"
-                onClick={() => void toggleSpeakEnglishText(sec.en, 'us')}
+                aria-pressed={ex2UsState !== 'idle'}
+                aria-busy={ex2UsState === 'loading'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void triggerTap();
+                  void toggleSpeakEnglishText(sec.en, 'us', {
+                    role: 'sentence',
+                    sourceId: ex2UsId,
+                  });
+                }}
                 aria-label={`Ouvir frase 2 de ${card.term} em inglês americano`}
-                className="min-h-[30px] lg:min-h-[24px] inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md bg-[#EAF3F1] dark:bg-[#1E312E] text-[10px] font-semibold text-[#225851] dark:text-[#86CEC2] hover:opacity-85 whitespace-nowrap shrink-0 cursor-pointer"
+                title="Ouvir frase completa 2 em Inglês Americano (US)"
+                className={`min-h-[30px] lg:min-h-[24px] inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-semibold whitespace-nowrap shrink-0 cursor-pointer transition-colors ${stateMotionClass(
+                  ex2UsState
+                )} ${
+                  ex2UsState !== 'idle'
+                    ? 'bg-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
+                    : 'bg-[#EAF3F1] dark:bg-[#1E312E] text-[#225851] dark:text-[#86CEC2] hover:opacity-85'
+                }`}
               >
-                <Volume2 className="w-2.5 h-2.5" />
+                <AudioStatusIcon
+                  state={ex2UsState}
+                  idleClassName="w-2.5 h-2.5 shrink-0"
+                  activeClassName="w-2.5 h-2.5"
+                />
                 <span>US</span>
               </button>
               <button
                 type="button"
-                onClick={() => void toggleSpeakEnglishText(sec.en, 'uk')}
+                aria-pressed={ex2UkState !== 'idle'}
+                aria-busy={ex2UkState === 'loading'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void triggerTap();
+                  void toggleSpeakEnglishText(sec.en, 'uk', {
+                    role: 'sentence',
+                    sourceId: ex2UkId,
+                  });
+                }}
                 aria-label={`Ouvir frase 2 de ${card.term} em inglês britânico`}
-                className="min-h-[30px] lg:min-h-[24px] inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md bg-[#EDF1F5] dark:bg-[#1E2630] text-[10px] font-semibold text-[#243B53] dark:text-[#9CC3E6] hover:opacity-85 whitespace-nowrap shrink-0 cursor-pointer"
+                title="Ouvir frase completa 2 em Inglês Britânico (UK)"
+                className={`min-h-[30px] lg:min-h-[24px] inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-semibold whitespace-nowrap shrink-0 cursor-pointer transition-colors ${stateMotionClass(
+                  ex2UkState
+                )} ${
+                  ex2UkState !== 'idle'
+                    ? 'bg-[#243B53] text-white dark:bg-[#2E4C6B] dark:text-[#F4F7F8]'
+                    : 'bg-[#EDF1F5] dark:bg-[#1E2630] text-[#243B53] dark:text-[#9CC3E6] hover:opacity-85'
+                }`}
               >
-                <Volume2 className="w-2.5 h-2.5" />
+                <AudioStatusIcon
+                  state={ex2UkState}
+                  idleClassName="w-2.5 h-2.5 shrink-0"
+                  activeClassName="w-2.5 h-2.5"
+                />
                 <span>UK</span>
               </button>
             </div>
@@ -473,6 +732,7 @@ export const ListView = memo(function ListView({
     return map;
   }, [selectedStudyIds]);
 
+  const { activeAudio } = useAudioPlaybackState();
   const [isListening, setIsListening] = useState(false);
   const [pronunciationSession, setPronunciationSession] =
     useState<CardPronunciationSession | null>(null);
@@ -484,6 +744,7 @@ export const ListView = memo(function ListView({
         recognitionRef.current.abort();
         recognitionRef.current = null;
       }
+      stopCurrentAudio();
     };
   }, []);
 
@@ -766,6 +1027,7 @@ export const ListView = memo(function ListView({
               card={card}
               isSelected={selectedStudyIds.has(card.id)}
               selOrder={selectionOrderMap.get(card.id) ?? null}
+              activeAudio={activeAudio}
               onToggleCardSelection={onToggleCardSelection}
               onEditCard={onEditCard}
               onDeleteCard={onDeleteCard}
@@ -781,6 +1043,7 @@ export const ListView = memo(function ListView({
               card={card}
               isSelected={selectedStudyIds.has(card.id)}
               selOrder={selectionOrderMap.get(card.id) ?? null}
+              activeAudio={activeAudio}
               onToggleCardSelection={onToggleCardSelection}
               onUpdateCardCategory={onUpdateCardCategory}
               onUpdateCardSubtopic={onUpdateCardSubtopic}

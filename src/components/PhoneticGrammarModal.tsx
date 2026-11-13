@@ -1,8 +1,11 @@
-import { CheckCircle2, Search, ShieldCheck, Volume2, X, XCircle } from 'lucide-react';
-import { useState } from 'react';
+import { CheckCircle2, Search, ShieldCheck, X, XCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useAudioPlaybackState } from '../hooks/useAudioPlaybackState';
+import { triggerTap } from '../services/platform/hapticsService';
 import type { GrammarAuditResult } from '../types/flashcard';
 import { auditEnglishGrammarAndCollocations } from '../utils/grammarEngine';
-import { speakEnglishText } from '../utils/speech';
+import { stopCurrentAudio, toggleSpeakEnglishText } from '../utils/speech';
+import { AudioStatusIcon } from './CardAudioControls';
 
 interface PhoneticGrammarModalProps {
   isOpen: boolean;
@@ -62,8 +65,18 @@ const SAMPLE_TRAPS = [
 ];
 
 export function PhoneticGrammarModal({ isOpen, onClose }: PhoneticGrammarModalProps) {
+  const { getButtonState } = useAudioPlaybackState();
   const [testInput, setTestInput] = useState('');
   const [auditResult, setAuditResult] = useState<GrammarAuditResult | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      stopCurrentAudio();
+    }
+    return () => {
+      stopCurrentAudio();
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -147,26 +160,90 @@ export function PhoneticGrammarModal({ isOpen, onClose }: PhoneticGrammarModalPr
                       &ldquo;{rule.speak}&rdquo;
                     </span>
                     <div className="inline-flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => void speakEnglishText(rule.speak, 'us')}
-                        title={`Ouvir em Inglês Americano: ${rule.speak}`}
-                        aria-label={`Ouvir em inglês americano: ${rule.speak}`}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#EAF3F1] dark:bg-[#1E312E] text-[11px] font-semibold text-[#28665E] dark:text-[#86CEC2] hover:opacity-85 cursor-pointer whitespace-nowrap shrink-0"
-                      >
-                        <Volume2 className="w-3 h-3" />
-                        <span>US</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void speakEnglishText(rule.speak, 'uk')}
-                        title={`Ouvir em Inglês Britânico: ${rule.speak}`}
-                        aria-label={`Ouvir em inglês britânico: ${rule.speak}`}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#EAF3F1] dark:bg-[#1E312E] text-[11px] font-semibold text-[#28665E] dark:text-[#86CEC2] hover:opacity-85 cursor-pointer whitespace-nowrap shrink-0"
-                      >
-                        <Volume2 className="w-3 h-3" />
-                        <span>UK</span>
-                      </button>
+                      {(() => {
+                        const usId = `phonetic-rule-${rule.title}-us`;
+                        const ukId = `phonetic-rule-${rule.title}-uk`;
+                        const usSt = getButtonState({
+                          text: rule.speak,
+                          accent: 'us',
+                          sourceId: usId,
+                        });
+                        const ukSt = getButtonState({
+                          text: rule.speak,
+                          accent: 'uk',
+                          sourceId: ukId,
+                        });
+                        return (
+                          <>
+                            <button
+                              type="button"
+                              aria-pressed={usSt !== 'idle'}
+                              aria-busy={usSt === 'loading'}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void triggerTap();
+                                void toggleSpeakEnglishText(rule.speak, 'us', {
+                                  role: 'sentence',
+                                  sourceId: usId,
+                                });
+                              }}
+                              title={`Ouvir em Inglês Americano: ${rule.speak}`}
+                              aria-label={`Ouvir em inglês americano: ${rule.speak}`}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold cursor-pointer whitespace-nowrap shrink-0 transition-colors ${
+                                usSt === 'loading'
+                                  ? 'ewm-audio-loading'
+                                  : usSt === 'playing'
+                                  ? 'ewm-audio-playing'
+                                  : ''
+                              } ${
+                                usSt !== 'idle'
+                                  ? 'bg-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
+                                  : 'bg-[#EAF3F1] dark:bg-[#1E312E] text-[#28665E] dark:text-[#86CEC2] hover:opacity-85'
+                              }`}
+                            >
+                              <AudioStatusIcon
+                                state={usSt}
+                                idleClassName="w-3 h-3 shrink-0"
+                                activeClassName="w-3 h-2.5"
+                              />
+                              <span>US</span>
+                            </button>
+                            <button
+                              type="button"
+                              aria-pressed={ukSt !== 'idle'}
+                              aria-busy={ukSt === 'loading'}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void triggerTap();
+                                void toggleSpeakEnglishText(rule.speak, 'uk', {
+                                  role: 'sentence',
+                                  sourceId: ukId,
+                                });
+                              }}
+                              title={`Ouvir em Inglês Britânico: ${rule.speak}`}
+                              aria-label={`Ouvir em inglês britânico: ${rule.speak}`}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold cursor-pointer whitespace-nowrap shrink-0 transition-colors ${
+                                ukSt === 'loading'
+                                  ? 'ewm-audio-loading'
+                                  : ukSt === 'playing'
+                                  ? 'ewm-audio-playing'
+                                  : ''
+                              } ${
+                                ukSt !== 'idle'
+                                  ? 'bg-[#243B53] text-white dark:bg-[#2E4C6B] dark:text-[#F4F7F8]'
+                                  : 'bg-[#EDF1F5] dark:bg-[#1E2630] text-[#243B53] dark:text-[#9CC3E6] hover:opacity-85'
+                              }`}
+                            >
+                              <AudioStatusIcon
+                                state={ukSt}
+                                idleClassName="w-3 h-3 shrink-0"
+                                activeClassName="w-3 h-2.5"
+                              />
+                              <span>UK</span>
+                            </button>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>

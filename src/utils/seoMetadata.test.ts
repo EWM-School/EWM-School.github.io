@@ -126,16 +126,16 @@ describe('seoMetadata & PWA icon compliance', () => {
       icons: Array<{ src: string; sizes: string; type: string; purpose: string }>;
     };
 
-    assert.equal(manifest.id, '/');
+    assert.equal(manifest.id, './');
     assert.equal(manifest.name, 'EWM - Keep practicing');
     assert.equal(manifest.short_name, 'EWM');
     assert.ok(manifest.short_name.length <= 12);
     assert.ok(manifest.description.length >= 40);
-    assert.equal(manifest.start_url, '/');
-    assert.equal(manifest.scope, '/');
+    assert.equal(manifest.start_url, './');
+    assert.equal(manifest.scope, './');
     assert.equal(manifest.display, 'standalone');
     assert.equal(manifest.orientation, 'any');
-    assert.equal(manifest.background_color, '#FFFFFF');
+    assert.equal(manifest.background_color, '#F6F4EF');
     assert.equal(manifest.theme_color, '#28665E');
 
     const anyIcons = manifest.icons.filter((i) => i.purpose === 'any');

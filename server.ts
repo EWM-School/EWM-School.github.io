@@ -7,6 +7,7 @@ import { GoogleGenAI, Type, type Schema } from '@google/genai';
 import {
   buildGeminiTtsDirective,
   type TtsCadenceSpeed,
+  type TtsPedagogicalRole,
 } from './src/utils/phoneticNormalizer.js';
 import {
   injectAbsoluteSocialMetadata,
@@ -1205,6 +1206,12 @@ app.post('/api/gemini/tts', async (req, res) => {
   const rawText = sanitizeUserInput(req.body?.text, 320);
   const accent: 'us' | 'uk' = req.body?.accent === 'uk' ? 'uk' : 'us';
   const speed: TtsCadenceSpeed = req.body?.speed === 'slow' ? 'slow' : 'normal';
+  const role: TtsPedagogicalRole | undefined =
+    req.body?.role === 'sentence'
+      ? 'sentence'
+      : req.body?.role === 'term'
+      ? 'term'
+      : undefined;
 
   if (!rawText) {
     return res.status(400).json({
@@ -1223,8 +1230,8 @@ app.post('/api/gemini/tts', async (req, res) => {
     });
   }
 
-  const directive = buildGeminiTtsDirective(rawText, accent, speed);
-  const cacheKey = `${directive.languageCode}|${speed}|${directive.normalizedText.toLowerCase()}`;
+  const directive = buildGeminiTtsDirective(rawText, accent, speed, role);
+  const cacheKey = `${directive.languageCode}|${speed}|${directive.role}|${directive.normalizedText.toLowerCase()}`;
 
   const cached = getCachedTts(cacheKey);
   if (cached) {
@@ -1332,6 +1339,9 @@ app.post('/api/gemini/tts', async (req, res) => {
       });
     } catch (err) {
       lastError = err;
+      if (req.destroyed || res.writableEnded) {
+        return;
+      }
       if (attempt === 0) {
         await new Promise((r) => setTimeout(r, 150));
       }

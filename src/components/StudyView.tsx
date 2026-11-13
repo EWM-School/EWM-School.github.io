@@ -14,13 +14,12 @@ import {
   Share2,
   Shuffle,
   Trash2,
-  Volume2,
 } from 'lucide-react';
-import type { EnglishAccent, Flashcard, StudyScope } from '../types/flashcard';
+import type { Flashcard, StudyScope } from '../types/flashcard';
 import { getCardSecondExample } from '../utils/deckHelpers';
 import { getCardPhonetics } from '../utils/phonetics';
 import {
-  cleanEnglishForSpeech,
+  getAudioButtonVisualState,
   getSpeechSpeed,
   stopCurrentAudio,
   subscribeAudioPlayback,
@@ -31,7 +30,7 @@ import {
 } from '../services/platform/speechService';
 import { triggerTap } from '../services/platform/hapticsService';
 import {
-  AudioWaveIcon,
+  AudioStatusIcon,
   BackFaceTermAudioControls,
   CardTermAudioControls,
   SentenceAudioButtons,
@@ -137,13 +136,13 @@ export const StudyView = memo(function StudyView({
 
   const progressPct = cards.length > 0 ? ((safeIndex + 1) / cards.length) * 100 : 0;
 
-  const isPlaying = (rawText: string, targetAccent: EnglishAccent) => {
-    if (!activeAudio) return false;
-    return (
-      activeAudio.accent === targetAccent &&
-      activeAudio.text === cleanEnglishForSpeech(rawText)
-    );
-  };
+  const ukVariantState = phonetics.ukVariantTerm
+    ? getAudioButtonVisualState(activeAudio, {
+        text: phonetics.ukVariantTerm,
+        accent: 'uk',
+        sourceId: 'study-uk-variant',
+      })
+    : 'idle';
 
   const handleTouchStart = (e: TouchEvent<HTMLElement>) => {
     const t = e.touches[0];
@@ -669,21 +668,34 @@ export const StudyView = memo(function StudyView({
                       {phonetics.ukVariantTerm && (
                         <button
                           type="button"
-                          aria-pressed={isPlaying(phonetics.ukVariantTerm, 'uk')}
-                          onClick={() =>
+                          aria-pressed={ukVariantState !== 'idle'}
+                          aria-busy={ukVariantState === 'loading'}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void triggerTap();
                             void toggleSpeakEnglishText(phonetics.ukVariantTerm as string, 'uk', {
                               speed: speechSpeed,
-                            })
-                          }
-                          className="min-h-[34px] lg:min-h-[30px] inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-lg bg-[#243B53] hover:bg-[#1B2D40] text-white dark:bg-[#2E4C6B] dark:hover:bg-[#375A7F] dark:text-[#F4F7F8] text-[11px] font-semibold whitespace-nowrap shrink-0 cursor-pointer"
+                              role: 'term',
+                              sourceId: 'study-uk-variant',
+                            });
+                          }}
+                          className={`min-h-[34px] lg:min-h-[30px] inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-lg bg-[#243B53] hover:bg-[#1B2D40] text-white dark:bg-[#2E4C6B] dark:hover:bg-[#375A7F] dark:text-[#F4F7F8] text-[11px] font-semibold whitespace-nowrap shrink-0 cursor-pointer ${
+                            ukVariantState === 'loading'
+                              ? 'ewm-audio-loading'
+                              : ukVariantState === 'playing'
+                              ? 'ewm-audio-playing'
+                              : ''
+                          }`}
                         >
-                          {isPlaying(phonetics.ukVariantTerm, 'uk') ? (
-                            <AudioWaveIcon className="w-3 h-3" />
-                          ) : (
-                            <Volume2 className="w-3 h-3" />
-                          )}
+                          <AudioStatusIcon
+                            state={ukVariantState}
+                            idleClassName="w-3 h-3 shrink-0"
+                            activeClassName="w-3 h-3"
+                          />
                           <span>
-                            {isPlaying(phonetics.ukVariantTerm, 'uk')
+                            {ukVariantState === 'loading'
+                              ? 'Carregando UK...'
+                              : ukVariantState === 'playing'
                               ? 'Ouvindo UK...'
                               : 'Ouvir variante UK'}
                           </span>

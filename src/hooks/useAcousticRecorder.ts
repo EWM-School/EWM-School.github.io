@@ -9,7 +9,12 @@ import {
   releaseMicrophoneStream,
   type MicrophonePermissionErrorInfo,
 } from '../services/platform/acousticPronunciationService';
-import { stopCurrentAudio } from '../services/platform/speechService';
+import {
+  getActiveAudioPlayback,
+  stopCurrentAudio,
+  subscribeAudioPlayback,
+  toggleRecordedBlobAudio,
+} from '../services/platform/speechService';
 import type {
   PronunciationAccent,
   PronunciationEvaluationResult,
@@ -65,7 +70,9 @@ export function useAcousticRecorder({
   const startedAtMsRef = useRef<number>(0);
   const lastUiFrameMsRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const ownAudioElRef = useRef<HTMLAudioElement | null>(null);
+  const recorderPlaybackIdRef = useRef<string>(
+    `student-own-recording-${Math.random().toString(36).slice(2, 8)}`
+  );
   const recordedUrlRef = useRef<string | null>(null);
   const isMountedRef = useRef<boolean>(true);
   const discardOnStopRef = useRef<boolean>(false);
@@ -94,17 +101,20 @@ export function useAcousticRecorder({
     };
   }, []);
 
+  useEffect(() => {
+    const ownSourceId = recorderPlaybackIdRef.current;
+    return subscribeAudioPlayback((active) => {
+      if (!isMountedRef.current) return;
+      setIsPlayingOwnAudio(
+        Boolean(active && active.role === 'recording' && active.sourceId === ownSourceId)
+      );
+    });
+  }, []);
+
   const stopOwnPlayback = useCallback(() => {
-    if (ownAudioElRef.current) {
-      try {
-        ownAudioElRef.current.onended = null;
-        ownAudioElRef.current.onerror = null;
-        ownAudioElRef.current.pause();
-        ownAudioElRef.current.currentTime = 0;
-      } catch {
-        // ignore
-      }
-      ownAudioElRef.current = null;
+    const active = getActiveAudioPlayback();
+    if (active?.role === 'recording' && active.sourceId === recorderPlaybackIdRef.current) {
+      stopCurrentAudio();
     }
     if (isMountedRef.current) {
       setIsPlayingOwnAudio(false);
@@ -506,46 +516,12 @@ export function useAcousticRecorder({
 
   const togglePlayOwnRecording = useCallback(() => {
     if (!recordedUrl) return;
-    if (isPlayingOwnAudio) {
-      stopOwnPlayback();
-      return;
-    }
-
-    // Stop native TTS before playing student's own recording
-    stopCurrentAudio();
-    stopOwnPlayback();
-
-    const audio = new Audio(recordedUrl);
-    ownAudioElRef.current = audio;
-    setIsPlayingOwnAudio(true);
-
-    audio.onended = () => {
-      if (ownAudioElRef.current === audio) {
-        ownAudioElRef.current = null;
-      }
-      if (isMountedRef.current) {
-        setIsPlayingOwnAudio(false);
-      }
-    };
-
-    audio.onerror = () => {
-      if (ownAudioElRef.current === audio) {
-        ownAudioElRef.current = null;
-      }
-      if (isMountedRef.current) {
-        setIsPlayingOwnAudio(false);
-      }
-    };
-
-    void audio.play().catch(() => {
-      if (ownAudioElRef.current === audio) {
-        ownAudioElRef.current = null;
-      }
-      if (isMountedRef.current) {
-        setIsPlayingOwnAudio(false);
-      }
+    void toggleRecordedBlobAudio(recordedUrl, {
+      blob: recordedBlob,
+      sourceId: recorderPlaybackIdRef.current,
+      accent: accent === 'en-GB' ? 'uk' : 'us',
     });
-  }, [isPlayingOwnAudio, recordedUrl, stopOwnPlayback]);
+  }, [accent, recordedBlob, recordedUrl]);
 
   return {
     status,

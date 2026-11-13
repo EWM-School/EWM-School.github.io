@@ -84,7 +84,7 @@ async function fetchGeminiLookupCard(
   const controller = new AbortController();
   const onAbort = () => controller.abort();
   parentSignal?.addEventListener('abort', onAbort, { once: true });
-  const timer = window.setTimeout(() => controller.abort(), 16000);
+  const timer = globalThis.setTimeout(() => controller.abort(), 16000);
 
   try {
     const resp = await fetch('/api/gemini/lookup-card', {
@@ -146,7 +146,7 @@ async function fetchGeminiLookupCard(
       throw err;
     }
   } finally {
-    window.clearTimeout(timer);
+    globalThis.clearTimeout(timer);
     parentSignal?.removeEventListener('abort', onAbort);
   }
   return null;
@@ -184,7 +184,7 @@ export async function generateNewExampleSentence(
     const controller = new AbortController();
     const onAbort = () => controller.abort();
     parentSignal?.addEventListener('abort', onAbort, { once: true });
-    const timer = window.setTimeout(() => controller.abort(), 16000);
+    const timer = globalThis.setTimeout(() => controller.abort(), 16000);
 
     try {
       const resp = await fetch('/api/gemini/generate-sentence', {
@@ -225,7 +225,7 @@ export async function generateNewExampleSentence(
         throw err;
       }
     } finally {
-      window.clearTimeout(timer);
+      globalThis.clearTimeout(timer);
       parentSignal?.removeEventListener('abort', onAbort);
     }
   }

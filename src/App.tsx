@@ -117,6 +117,7 @@ import {
 } from './utils/deckHelpers';
 import {
   compareUsAndUkSpeech,
+  stopCurrentAudio,
   toggleSpeakEnglishText,
   toggleSpeechSpeed,
 } from './utils/speech';
@@ -251,10 +252,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<AppTab>('study');
   const [studyScope, setStudyScope] = useState<StudyScope>(initialLegacy.workspace.studyScope);
 
-  useEffect(() => {
-    releaseAllActiveMicrophoneStreams();
-  }, [activeTab, showCover]);
-
   const [selectedCategory, setSelectedCategory] = useState<'all' | TopicFolder>('all');
   const [selectedSubtopic, setSelectedSubtopic] = useState<'all' | SubtopicKey>('all');
   const [selectedStatus, setSelectedStatus] = useState<StatusFilter>('all');
@@ -266,6 +263,11 @@ export default function App() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+
+  useEffect(() => {
+    releaseAllActiveMicrophoneStreams();
+    stopCurrentAudio();
+  }, [activeTab, showCover, focusMode]);
 
   // Modals & Notifications
   const [cardModalOpen, setCardModalOpen] = useState(false);
@@ -1151,7 +1153,11 @@ export default function App() {
           const safeIdx = Math.min(currentIndex, filteredStudyCards.length - 1);
           const current = filteredStudyCards[safeIdx];
           if (current) {
-            void toggleSpeakEnglishText(current.term, lowerKey === 'b' ? 'uk' : 'us');
+            const accent = lowerKey === 'b' ? 'uk' : 'us';
+            void toggleSpeakEnglishText(current.term, accent, {
+              role: 'term',
+              sourceId: accent === 'uk' ? 'card-main-uk' : 'card-main-us',
+            });
           }
         }
       } else if (lowerKey === 'c') {
@@ -1160,7 +1166,10 @@ export default function App() {
           const safeIdx = Math.min(currentIndex, filteredStudyCards.length - 1);
           const current = filteredStudyCards[safeIdx];
           if (current) {
-            void compareUsAndUkSpeech(current.term, current.term);
+            void compareUsAndUkSpeech(current.term, current.term, {
+              role: 'term',
+              sourceId: 'card-main-compare',
+            });
           }
         }
       } else if (lowerKey === 's') {

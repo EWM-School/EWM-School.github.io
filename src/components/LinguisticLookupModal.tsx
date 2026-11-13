@@ -10,12 +10,12 @@ import {
   Plus,
   Search,
   Sparkles,
-  Volume2,
   WifiOff,
   X,
   XCircle,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAudioPlaybackState } from '../hooks/useAudioPlaybackState';
 import {
   isAbortError,
   isLinguisticOfflineError,
@@ -35,7 +35,13 @@ import {
   type GrammarCheckPayload,
   type LinguisticEngineResult,
 } from '../utils/linguisticNormalizer';
-import { stopCurrentAudio, toggleSpeakEnglishText } from '../utils/speech';
+import {
+  getAudioButtonVisualState,
+  stopCurrentAudio,
+  toggleSpeakEnglishText,
+  type ActiveAudioPlayback,
+} from '../utils/speech';
+import { AudioStatusIcon } from './CardAudioControls';
 
 interface LinguisticLookupModalProps {
   isOpen: boolean;
@@ -139,6 +145,7 @@ export function LinguisticLookupModal({
   onAddConsultToStudy,
   onAutoFeedCandidate,
 }: LinguisticLookupModalProps) {
+  const { activeAudio } = useAudioPlaybackState();
   const [queryText, setQueryText] = useState('');
   const [modeOverride, setModeOverride] = useState<ModeOverride>('auto');
   const [voiceLang, setVoiceLang] = useState<'pt-BR' | 'en-US'>('pt-BR');
@@ -619,6 +626,7 @@ export function LinguisticLookupModal({
           {!isLoading && result && result.mode === 'CONSULT_TRANSLATE' && (
             <ConsultTranslateView
               data={result}
+              activeAudio={activeAudio}
               discoveryBanner={discoveryBanner}
               alreadyInStudy={alreadyInStudy}
               onAddToStudy={() => {
@@ -633,7 +641,11 @@ export function LinguisticLookupModal({
               MODO 2: EXAMINADOR GRAMATICAL RIGOROSO C2
               ================================================================= */}
           {!isLoading && result && result.mode === 'GRAMMAR_CHECK' && (
-            <GrammarExaminerView data={result} shakeVerdict={shakeVerdict} />
+            <GrammarExaminerView
+              data={result}
+              activeAudio={activeAudio}
+              shakeVerdict={shakeVerdict}
+            />
           )}
         </div>
       </div>
@@ -643,15 +655,30 @@ export function LinguisticLookupModal({
 
 function ConsultTranslateView({
   data,
+  activeAudio,
   discoveryBanner,
   alreadyInStudy,
   onAddToStudy,
 }: {
   data: ConsultTranslatePayload;
+  activeAudio: ActiveAudioPlayback | null;
   discoveryBanner: { integrated: boolean; bonusXp: number; animKey: number } | null;
   alreadyInStudy: boolean;
   onAddToStudy: () => void;
 }) {
+  const mainUsState = getAudioButtonVisualState(activeAudio, {
+    text: data.englishExpression,
+    accent: 'us',
+    sourceId: 'consult-main-us',
+  });
+  const mainUkState = getAudioButtonVisualState(activeAudio, {
+    text: data.englishExpression,
+    accent: 'uk',
+    sourceId: 'consult-main-uk',
+  });
+
+  const stateClass = (st: 'idle' | 'loading' | 'playing') =>
+    st === 'loading' ? 'ewm-audio-loading' : st === 'playing' ? 'ewm-audio-playing' : '';
   return (
     <div className="space-y-4 ewm-pillar-enter">
       {/* Discreet Auto-Feed Global Discovery Notice + Floating +2 XP */}
@@ -694,18 +721,56 @@ function ConsultTranslateView({
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
-              onClick={() => void toggleSpeakEnglishText(data.englishExpression, 'us')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#CDE0DC] dark:border-[#38E5A5]/30 bg-[#F2F9F7] dark:bg-[#172A24] text-xs font-bold text-[#1E524A] dark:text-[#38E5A5] cursor-pointer"
+              aria-pressed={mainUsState !== 'idle'}
+              aria-busy={mainUsState === 'loading'}
+              onClick={(e) => {
+                e.stopPropagation();
+                void triggerTap();
+                void toggleSpeakEnglishText(data.englishExpression, 'us', {
+                  role: 'term',
+                  sourceId: 'consult-main-us',
+                });
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-colors ${stateClass(
+                mainUsState
+              )} ${
+                mainUsState !== 'idle'
+                  ? 'bg-[#28665E] border-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
+                  : 'border-[#CDE0DC] dark:border-[#38E5A5]/30 bg-[#F2F9F7] dark:bg-[#172A24] text-[#1E524A] dark:text-[#38E5A5]'
+              }`}
             >
-              <Volume2 className="w-3.5 h-3.5" />
+              <AudioStatusIcon
+                state={mainUsState}
+                idleClassName="w-3.5 h-3.5 shrink-0"
+                activeClassName="w-3.5 h-3"
+              />
               <span>US</span>
             </button>
             <button
               type="button"
-              onClick={() => void toggleSpeakEnglishText(data.englishExpression, 'uk')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#CBD9E6] dark:border-[#38526B] bg-[#F2F6FA] dark:bg-[#192530] text-xs font-bold text-[#244B6B] dark:text-[#8CC2F0] cursor-pointer"
+              aria-pressed={mainUkState !== 'idle'}
+              aria-busy={mainUkState === 'loading'}
+              onClick={(e) => {
+                e.stopPropagation();
+                void triggerTap();
+                void toggleSpeakEnglishText(data.englishExpression, 'uk', {
+                  role: 'term',
+                  sourceId: 'consult-main-uk',
+                });
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-colors ${stateClass(
+                mainUkState
+              )} ${
+                mainUkState !== 'idle'
+                  ? 'bg-[#243B53] border-[#243B53] text-white dark:bg-[#2E4C6B] dark:text-[#F4F7F8]'
+                  : 'border-[#CBD9E6] dark:border-[#38526B] bg-[#F2F6FA] dark:bg-[#192530] text-[#244B6B] dark:text-[#8CC2F0]'
+              }`}
             >
-              <Volume2 className="w-3.5 h-3.5" />
+              <AudioStatusIcon
+                state={mainUkState}
+                idleClassName="w-3.5 h-3.5 shrink-0"
+                activeClassName="w-3.5 h-3"
+              />
               <span>UK</span>
             </button>
           </div>
@@ -763,20 +828,76 @@ function ConsultTranslateView({
                     </span>
                   </div>
                   <div className="inline-flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => void toggleSpeakEnglishText(nuance.expressionEn, 'us')}
-                      className="px-1.5 py-0.5 rounded text-[10px] font-bold text-[#28665E] dark:text-[#38E5A5] hover:bg-[#EAF3F1] dark:hover:bg-[#172A24] cursor-pointer"
-                    >
-                      US
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void toggleSpeakEnglishText(nuance.expressionEn, 'uk')}
-                      className="px-1.5 py-0.5 rounded text-[10px] font-bold text-[#244B6B] dark:text-[#8CC2F0] hover:bg-[#EDF3F8] dark:hover:bg-[#1B2834] cursor-pointer"
-                    >
-                      UK
-                    </button>
+                    {(() => {
+                      const nUsId = `consult-nuance-${idx}-us`;
+                      const nUkId = `consult-nuance-${idx}-uk`;
+                      const nUsSt = getAudioButtonVisualState(activeAudio, {
+                        text: nuance.expressionEn,
+                        accent: 'us',
+                        sourceId: nUsId,
+                      });
+                      const nUkSt = getAudioButtonVisualState(activeAudio, {
+                        text: nuance.expressionEn,
+                        accent: 'uk',
+                        sourceId: nUkId,
+                      });
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            aria-pressed={nUsSt !== 'idle'}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void triggerTap();
+                              void toggleSpeakEnglishText(nuance.expressionEn, 'us', {
+                                role: 'term',
+                                sourceId: nUsId,
+                              });
+                            }}
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${stateClass(
+                              nUsSt
+                            )} ${
+                              nUsSt !== 'idle'
+                                ? 'bg-[#28665E] text-white dark:bg-[#2A6D63]'
+                                : 'text-[#28665E] dark:text-[#38E5A5] hover:bg-[#EAF3F1] dark:hover:bg-[#172A24]'
+                            }`}
+                          >
+                            <AudioStatusIcon
+                              state={nUsSt}
+                              idleClassName="w-2.5 h-2.5 shrink-0"
+                              activeClassName="w-2.5 h-2.5"
+                            />
+                            <span>US</span>
+                          </button>
+                          <button
+                            type="button"
+                            aria-pressed={nUkSt !== 'idle'}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void triggerTap();
+                              void toggleSpeakEnglishText(nuance.expressionEn, 'uk', {
+                                role: 'term',
+                                sourceId: nUkId,
+                              });
+                            }}
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${stateClass(
+                              nUkSt
+                            )} ${
+                              nUkSt !== 'idle'
+                                ? 'bg-[#243B53] text-white dark:bg-[#2E4C6B]'
+                                : 'text-[#244B6B] dark:text-[#8CC2F0] hover:bg-[#EDF3F8] dark:hover:bg-[#1B2834]'
+                            }`}
+                          >
+                            <AudioStatusIcon
+                              state={nUkSt}
+                              idleClassName="w-2.5 h-2.5 shrink-0"
+                              activeClassName="w-2.5 h-2.5"
+                            />
+                            <span>UK</span>
+                          </button>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
                 <p className="text-xs text-[#5C574E] dark:text-[#B4BBB5] leading-relaxed">
@@ -817,24 +938,78 @@ function ConsultTranslateView({
                   <p className="text-xs text-[#6B655C] dark:text-[#A5ADA7]">{ex.pt}</p>
                 </div>
                 <div className="inline-flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => void toggleSpeakEnglishText(ex.en, 'us')}
-                    title="Ouvir exemplo em inglês americano"
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[#D8D3C8] dark:border-[#323A34] text-[10px] font-bold text-[#28665E] dark:text-[#38E5A5] cursor-pointer"
-                  >
-                    <Volume2 className="w-3 h-3" />
-                    <span>US</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void toggleSpeakEnglishText(ex.en, 'uk')}
-                    title="Ouvir exemplo em inglês britânico"
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[#D8D3C8] dark:border-[#323A34] text-[10px] font-bold text-[#244B6B] dark:text-[#8CC2F0] cursor-pointer"
-                  >
-                    <Volume2 className="w-3 h-3" />
-                    <span>UK</span>
-                  </button>
+                  {(() => {
+                    const exUsId = `consult-ex-${idx}-us`;
+                    const exUkId = `consult-ex-${idx}-uk`;
+                    const exUsSt = getAudioButtonVisualState(activeAudio, {
+                      text: ex.en,
+                      accent: 'us',
+                      sourceId: exUsId,
+                    });
+                    const exUkSt = getAudioButtonVisualState(activeAudio, {
+                      text: ex.en,
+                      accent: 'uk',
+                      sourceId: exUkId,
+                    });
+                    return (
+                      <>
+                        <button
+                          type="button"
+                          aria-pressed={exUsSt !== 'idle'}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void triggerTap();
+                            void toggleSpeakEnglishText(ex.en, 'us', {
+                              role: 'sentence',
+                              sourceId: exUsId,
+                            });
+                          }}
+                          title="Ouvir exemplo em inglês americano"
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold cursor-pointer transition-colors ${stateClass(
+                            exUsSt
+                          )} ${
+                            exUsSt !== 'idle'
+                              ? 'bg-[#28665E] border-[#28665E] text-white dark:bg-[#2A6D63]'
+                              : 'border-[#D8D3C8] dark:border-[#323A34] text-[#28665E] dark:text-[#38E5A5]'
+                          }`}
+                        >
+                          <AudioStatusIcon
+                            state={exUsSt}
+                            idleClassName="w-3 h-3 shrink-0"
+                            activeClassName="w-3 h-2.5"
+                          />
+                          <span>US</span>
+                        </button>
+                        <button
+                          type="button"
+                          aria-pressed={exUkSt !== 'idle'}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void triggerTap();
+                            void toggleSpeakEnglishText(ex.en, 'uk', {
+                              role: 'sentence',
+                              sourceId: exUkId,
+                            });
+                          }}
+                          title="Ouvir exemplo em inglês britânico"
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] font-bold cursor-pointer transition-colors ${stateClass(
+                            exUkSt
+                          )} ${
+                            exUkSt !== 'idle'
+                              ? 'bg-[#243B53] border-[#243B53] text-white dark:bg-[#2E4C6B]'
+                              : 'border-[#D8D3C8] dark:border-[#323A34] text-[#244B6B] dark:text-[#8CC2F0]'
+                          }`}
+                        >
+                          <AudioStatusIcon
+                            state={exUkSt}
+                            idleClassName="w-3 h-3 shrink-0"
+                            activeClassName="w-3 h-2.5"
+                          />
+                          <span>UK</span>
+                        </button>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             ))}
@@ -877,11 +1052,39 @@ function ConsultTranslateView({
 
 function GrammarExaminerView({
   data,
+  activeAudio,
   shakeVerdict,
 }: {
   data: GrammarCheckPayload;
+  activeAudio: ActiveAudioPlayback | null;
   shakeVerdict: boolean;
 }) {
+  const corrUsState = getAudioButtonVisualState(activeAudio, {
+    text: data.correctedNaturalSentence,
+    accent: 'us',
+    sourceId: 'grammar-corr-us',
+  });
+  const corrUkState = getAudioButtonVisualState(activeAudio, {
+    text: data.correctedNaturalSentence,
+    accent: 'uk',
+    sourceId: 'grammar-corr-uk',
+  });
+  const altUsState = data.alternativeNaturalSentence
+    ? getAudioButtonVisualState(activeAudio, {
+        text: data.alternativeNaturalSentence,
+        accent: 'us',
+        sourceId: 'grammar-alt-us',
+      })
+    : 'idle';
+  const altUkState = data.alternativeNaturalSentence
+    ? getAudioButtonVisualState(activeAudio, {
+        text: data.alternativeNaturalSentence,
+        accent: 'uk',
+        sourceId: 'grammar-alt-uk',
+      })
+    : 'idle';
+  const stateClass = (st: 'idle' | 'loading' | 'playing') =>
+    st === 'loading' ? 'ewm-audio-loading' : st === 'playing' ? 'ewm-audio-playing' : '';
   const verdictMeta =
     data.verdict === 'PERFECT_NATURAL'
       ? {
@@ -963,18 +1166,54 @@ function GrammarExaminerView({
           <div className="inline-flex items-center gap-1.5 shrink-0">
             <button
               type="button"
-              onClick={() => void toggleSpeakEnglishText(data.correctedNaturalSentence, 'us')}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-[#CDE0DC] dark:border-[#38E5A5]/30 bg-[#F2F9F7] dark:bg-[#172A24] text-xs font-bold text-[#1E524A] dark:text-[#38E5A5] cursor-pointer"
+              aria-pressed={corrUsState !== 'idle'}
+              onClick={(e) => {
+                e.stopPropagation();
+                void triggerTap();
+                void toggleSpeakEnglishText(data.correctedNaturalSentence, 'us', {
+                  role: 'sentence',
+                  sourceId: 'grammar-corr-us',
+                });
+              }}
+              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-colors ${stateClass(
+                corrUsState
+              )} ${
+                corrUsState !== 'idle'
+                  ? 'bg-[#28665E] border-[#28665E] text-white dark:bg-[#2A6D63]'
+                  : 'border-[#CDE0DC] dark:border-[#38E5A5]/30 bg-[#F2F9F7] dark:bg-[#172A24] text-[#1E524A] dark:text-[#38E5A5]'
+              }`}
             >
-              <Volume2 className="w-3.5 h-3.5" />
+              <AudioStatusIcon
+                state={corrUsState}
+                idleClassName="w-3.5 h-3.5 shrink-0"
+                activeClassName="w-3.5 h-3"
+              />
               <span>US</span>
             </button>
             <button
               type="button"
-              onClick={() => void toggleSpeakEnglishText(data.correctedNaturalSentence, 'uk')}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-[#CBD9E6] dark:border-[#38526B] bg-[#F2F6FA] dark:bg-[#192530] text-xs font-bold text-[#244B6B] dark:text-[#8CC2F0] cursor-pointer"
+              aria-pressed={corrUkState !== 'idle'}
+              onClick={(e) => {
+                e.stopPropagation();
+                void triggerTap();
+                void toggleSpeakEnglishText(data.correctedNaturalSentence, 'uk', {
+                  role: 'sentence',
+                  sourceId: 'grammar-corr-uk',
+                });
+              }}
+              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-colors ${stateClass(
+                corrUkState
+              )} ${
+                corrUkState !== 'idle'
+                  ? 'bg-[#243B53] border-[#243B53] text-white dark:bg-[#2E4C6B]'
+                  : 'border-[#CBD9E6] dark:border-[#38526B] bg-[#F2F6FA] dark:bg-[#192530] text-[#244B6B] dark:text-[#8CC2F0]'
+              }`}
             >
-              <Volume2 className="w-3.5 h-3.5" />
+              <AudioStatusIcon
+                state={corrUkState}
+                idleClassName="w-3.5 h-3.5 shrink-0"
+                activeClassName="w-3.5 h-3"
+              />
               <span>UK</span>
             </button>
           </div>
@@ -990,21 +1229,55 @@ function GrammarExaminerView({
               <div className="inline-flex items-center gap-1 shrink-0">
                 <button
                   type="button"
-                  onClick={() =>
-                    void toggleSpeakEnglishText(data.alternativeNaturalSentence!, 'us')
-                  }
-                  className="px-1.5 py-0.5 rounded text-[10px] font-bold text-[#28665E] dark:text-[#38E5A5] cursor-pointer"
+                  aria-pressed={altUsState !== 'idle'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void triggerTap();
+                    void toggleSpeakEnglishText(data.alternativeNaturalSentence!, 'us', {
+                      role: 'sentence',
+                      sourceId: 'grammar-alt-us',
+                    });
+                  }}
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${stateClass(
+                    altUsState
+                  )} ${
+                    altUsState !== 'idle'
+                      ? 'bg-[#28665E] text-white dark:bg-[#2A6D63]'
+                      : 'text-[#28665E] dark:text-[#38E5A5]'
+                  }`}
                 >
-                  US
+                  <AudioStatusIcon
+                    state={altUsState}
+                    idleClassName="w-2.5 h-2.5 shrink-0"
+                    activeClassName="w-2.5 h-2.5"
+                  />
+                  <span>US</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() =>
-                    void toggleSpeakEnglishText(data.alternativeNaturalSentence!, 'uk')
-                  }
-                  className="px-1.5 py-0.5 rounded text-[10px] font-bold text-[#244B6B] dark:text-[#8CC2F0] cursor-pointer"
+                  aria-pressed={altUkState !== 'idle'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void triggerTap();
+                    void toggleSpeakEnglishText(data.alternativeNaturalSentence!, 'uk', {
+                      role: 'sentence',
+                      sourceId: 'grammar-alt-uk',
+                    });
+                  }}
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${stateClass(
+                    altUkState
+                  )} ${
+                    altUkState !== 'idle'
+                      ? 'bg-[#243B53] text-white dark:bg-[#2E4C6B]'
+                      : 'text-[#244B6B] dark:text-[#8CC2F0]'
+                  }`}
                 >
-                  UK
+                  <AudioStatusIcon
+                    state={altUkState}
+                    idleClassName="w-2.5 h-2.5 shrink-0"
+                    activeClassName="w-2.5 h-2.5"
+                  />
+                  <span>UK</span>
                 </button>
               </div>
             </div>

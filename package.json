@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
+    "test": "node scripts/run-tests.mjs",
     "cap:doctor": "node --experimental-strip-types ./node_modules/@capacitor/cli/bin/capacitor doctor",
     "cap:copy": "node --experimental-strip-types ./node_modules/@capacitor/cli/bin/capacitor copy",
     "cap:sync": "node --experimental-strip-types ./node_modules/@capacitor/cli/bin/capacitor sync",

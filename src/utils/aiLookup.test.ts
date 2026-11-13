@@ -8,11 +8,10 @@ import {
 import { auditEnglishGrammarAndCollocations, isGenericTemplateSentence } from './grammarEngine';
 import { INITIAL_CARDS } from '../data/seedData';
 
-test('naturalizePortugueseSentence converts robotic book translations into natural Brazilian Portuguese', () => {
-  const result = naturalizePortugueseSentence('Nós estávamos indo para a reunião');
-  assert.equal(result.includes('A gente estava'), true);
-  assert.equal(result.includes('pra'), true);
-  assert.equal(result.endsWith('.'), true);
+test('naturalizePortugueseSentence strips grounding artifacts, arrows, and quotes while ensuring clean punctuation', () => {
+  const result = naturalizePortugueseSentence('→ "A gente já vai começar a reunião [1]"');
+  assert.equal(result, 'A gente já vai começar a reunião.');
+  assert.equal(naturalizePortugueseSentence('Tudo certo por aqui!'), 'Tudo certo por aqui!');
 });
 
 test('generateNewExampleSentence generates an audited sentence distinct from current examples', async () => {
@@ -29,8 +28,8 @@ test('generateNewExampleSentence generates an audited sentence distinct from cur
   assert.equal(isGenericTemplateSentence(res.exampleEn), false, 'Must not be a generic boilerplate template');
 });
 
-test('lookupSmartCardContent fills 100% of fields with verified data in EN -> PT direction', async () => {
-  const result = await lookupSmartCardContent('Hit the ground running', 'en-to-pt', INITIAL_CARDS);
+test('lookupSmartCardContent fills 100% of fields with verified data in EN -> PT direction and blocks synthetic offline templates', async () => {
+  const result = await lookupSmartCardContent('Long story short', 'en-to-pt', INITIAL_CARDS);
   assert.ok(result, 'Result must exist');
   assert.ok(result.term, 'term must be populated');
   assert.ok(result.category, 'category must be populated');
@@ -50,10 +49,16 @@ test('lookupSmartCardContent fills 100% of fields with verified data in EN -> PT
   assert.equal(audit1.valid, true, `Example 1 must be grammatically valid: ${audit1.reason}`);
   const audit2 = auditEnglishGrammarAndCollocations(result.exampleEn2, result.term);
   assert.equal(audit2.valid, true, `Example 2 must be grammatically valid: ${audit2.reason}`);
+
+  // Unseen expression offline must throw honest LinguisticOfflineError rather than inventing synthetic templates
+  await assert.rejects(
+    () => lookupSmartCardContent('Hit the ground running', 'en-to-pt', INITIAL_CARDS),
+    { name: 'LinguisticOfflineError' }
+  );
 });
 
 test('lookupSmartCardContent fills 100% of fields when queried in PT -> EN direction', async () => {
-  const result = await lookupSmartCardContent('dar a volta por cima', 'pt-to-en', INITIAL_CARDS);
+  const result = await lookupSmartCardContent('pisar na bola', 'pt-to-en', INITIAL_CARDS);
   assert.ok(result, 'Result must exist');
   assert.ok(result.term, 'term must be populated');
   assert.ok(result.exampleEn, 'exampleEn must be populated');

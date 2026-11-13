@@ -8,12 +8,12 @@ import {
   RefreshCw,
   Sparkles,
   Tag,
-  Volume2,
   WifiOff,
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { VALID_FOLDERS, VALID_SUBTOPICS } from '../data/seedData';
+import { useAudioPlaybackState } from '../hooks/useAudioPlaybackState';
 import type { AutoFeedCandidateInput } from '../services/linguisticEngineClient';
 import { triggerTap } from '../services/platform/hapticsService';
 import type { Flashcard, SubtopicKey, TopicFolder } from '../types/flashcard';
@@ -37,6 +37,7 @@ import {
   synthesizeOfflinePhrasePhonetics,
 } from '../utils/phonetics';
 import { stopCurrentAudio, toggleSpeakEnglishText } from '../utils/speech';
+import { AudioStatusIcon } from './CardAudioControls';
 
 interface CardModalProps {
   isOpen: boolean;
@@ -63,6 +64,7 @@ export function CardModal({
   onSelectExistingCard,
   onAutoFeedCandidate,
 }: CardModalProps) {
+  const { getButtonState } = useAudioPlaybackState();
   const [stage, setStage] = useState<ModalStage>(editingCard ? 'review_form' : 'magic_input');
   const [magicQuery, setMagicQuery] = useState('');
 
@@ -749,26 +751,88 @@ export function CardModal({
                       Expressão em Inglês
                     </label>
                     <div className="inline-flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        disabled={!term.trim()}
-                        onClick={() => void toggleSpeakEnglishText(term.trim(), 'us')}
-                        title="Ouvir pronúncia americana (US)"
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-[#D8D3C8] dark:border-[#333B35] bg-white dark:bg-[#252B26] text-[10px] font-bold text-[#28665E] dark:text-[#38E5A5] disabled:opacity-40 cursor-pointer"
-                      >
-                        <Volume2 className="w-2.5 h-2.5" />
-                        <span>US</span>
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!term.trim()}
-                        onClick={() => void toggleSpeakEnglishText(term.trim(), 'uk')}
-                        title="Ouvir pronúncia britânica (UK)"
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-[#D8D3C8] dark:border-[#333B35] bg-white dark:bg-[#252B26] text-[10px] font-bold text-[#244B6B] dark:text-[#8CC2F0] disabled:opacity-40 cursor-pointer"
-                      >
-                        <Volume2 className="w-2.5 h-2.5" />
-                        <span>UK</span>
-                      </button>
+                      {(() => {
+                        const termUsState = getButtonState({
+                          text: term.trim(),
+                          accent: 'us',
+                          sourceId: 'modal-term-us',
+                        });
+                        const termUkState = getButtonState({
+                          text: term.trim(),
+                          accent: 'uk',
+                          sourceId: 'modal-term-uk',
+                        });
+                        return (
+                          <>
+                            <button
+                              type="button"
+                              disabled={!term.trim()}
+                              aria-pressed={termUsState !== 'idle'}
+                              aria-busy={termUsState === 'loading'}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void triggerTap();
+                                void toggleSpeakEnglishText(term.trim(), 'us', {
+                                  role: 'term',
+                                  sourceId: 'modal-term-us',
+                                });
+                              }}
+                              title="Ouvir pronúncia americana (US)"
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-bold disabled:opacity-40 cursor-pointer transition-colors ${
+                                termUsState === 'loading'
+                                  ? 'ewm-audio-loading'
+                                  : termUsState === 'playing'
+                                  ? 'ewm-audio-playing'
+                                  : ''
+                              } ${
+                                termUsState !== 'idle'
+                                  ? 'bg-[#28665E] border-[#28665E] text-white dark:bg-[#2A6D63] dark:border-[#38E5A5]/60 dark:text-[#F4F7F6]'
+                                  : 'border-[#D8D3C8] dark:border-[#333B35] bg-white dark:bg-[#252B26] text-[#28665E] dark:text-[#38E5A5]'
+                              }`}
+                            >
+                              <AudioStatusIcon
+                                state={termUsState}
+                                idleClassName="w-2.5 h-2.5 shrink-0"
+                                activeClassName="w-2.5 h-2.5"
+                              />
+                              <span>US</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!term.trim()}
+                              aria-pressed={termUkState !== 'idle'}
+                              aria-busy={termUkState === 'loading'}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void triggerTap();
+                                void toggleSpeakEnglishText(term.trim(), 'uk', {
+                                  role: 'term',
+                                  sourceId: 'modal-term-uk',
+                                });
+                              }}
+                              title="Ouvir pronúncia britânica (UK)"
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-bold disabled:opacity-40 cursor-pointer transition-colors ${
+                                termUkState === 'loading'
+                                  ? 'ewm-audio-loading'
+                                  : termUkState === 'playing'
+                                  ? 'ewm-audio-playing'
+                                  : ''
+                              } ${
+                                termUkState !== 'idle'
+                                  ? 'bg-[#243B53] border-[#243B53] text-white dark:bg-[#2E4C6B] dark:border-[#8CC2F0]/60 dark:text-[#F4F7F8]'
+                                  : 'border-[#D8D3C8] dark:border-[#333B35] bg-white dark:bg-[#252B26] text-[#244B6B] dark:text-[#8CC2F0]'
+                              }`}
+                            >
+                              <AudioStatusIcon
+                                state={termUkState}
+                                idleClassName="w-2.5 h-2.5 shrink-0"
+                                activeClassName="w-2.5 h-2.5"
+                              />
+                              <span>UK</span>
+                            </button>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                   <input
@@ -858,26 +922,88 @@ export function CardModal({
                     Contexto Real (Exemplo)
                   </span>
                   <div className="inline-flex items-center gap-1">
-                    <button
-                      type="button"
-                      disabled={!exampleEn.trim() || isRegeneratingExample}
-                      onClick={() => void toggleSpeakEnglishText(exampleEn.trim(), 'us')}
-                      title="Ouvir frase em inglês americano (US)"
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold text-[#28665E] dark:text-[#38E5A5] hover:bg-[#EAF3F1] dark:hover:bg-[#1A2E27] disabled:opacity-40 cursor-pointer"
-                    >
-                      <Volume2 className="w-2.5 h-2.5" />
-                      <span>US</span>
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!exampleEn.trim() || isRegeneratingExample}
-                      onClick={() => void toggleSpeakEnglishText(exampleEn.trim(), 'uk')}
-                      title="Ouvir frase em inglês britânico (UK)"
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold text-[#244B6B] dark:text-[#8CC2F0] hover:bg-[#EDF3F8] dark:hover:bg-[#1B2834] disabled:opacity-40 cursor-pointer"
-                    >
-                      <Volume2 className="w-2.5 h-2.5" />
-                      <span>UK</span>
-                    </button>
+                    {(() => {
+                      const exUsState = getButtonState({
+                        text: exampleEn.trim(),
+                        accent: 'us',
+                        sourceId: 'modal-example-us',
+                      });
+                      const exUkState = getButtonState({
+                        text: exampleEn.trim(),
+                        accent: 'uk',
+                        sourceId: 'modal-example-uk',
+                      });
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            disabled={!exampleEn.trim() || isRegeneratingExample}
+                            aria-pressed={exUsState !== 'idle'}
+                            aria-busy={exUsState === 'loading'}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void triggerTap();
+                              void toggleSpeakEnglishText(exampleEn.trim(), 'us', {
+                                role: 'sentence',
+                                sourceId: 'modal-example-us',
+                              });
+                            }}
+                            title="Ouvir frase completa em inglês americano (US)"
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold disabled:opacity-40 cursor-pointer transition-colors ${
+                              exUsState === 'loading'
+                                ? 'ewm-audio-loading'
+                                : exUsState === 'playing'
+                                ? 'ewm-audio-playing'
+                                : ''
+                            } ${
+                              exUsState !== 'idle'
+                                ? 'bg-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
+                                : 'text-[#28665E] dark:text-[#38E5A5] hover:bg-[#EAF3F1] dark:hover:bg-[#1A2E27]'
+                            }`}
+                          >
+                            <AudioStatusIcon
+                              state={exUsState}
+                              idleClassName="w-2.5 h-2.5 shrink-0"
+                              activeClassName="w-2.5 h-2.5"
+                            />
+                            <span>US</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!exampleEn.trim() || isRegeneratingExample}
+                            aria-pressed={exUkState !== 'idle'}
+                            aria-busy={exUkState === 'loading'}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void triggerTap();
+                              void toggleSpeakEnglishText(exampleEn.trim(), 'uk', {
+                                role: 'sentence',
+                                sourceId: 'modal-example-uk',
+                              });
+                            }}
+                            title="Ouvir frase completa em inglês britânico (UK)"
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold disabled:opacity-40 cursor-pointer transition-colors ${
+                              exUkState === 'loading'
+                                ? 'ewm-audio-loading'
+                                : exUkState === 'playing'
+                                ? 'ewm-audio-playing'
+                                : ''
+                            } ${
+                              exUkState !== 'idle'
+                                ? 'bg-[#243B53] text-white dark:bg-[#2E4C6B] dark:text-[#F4F7F8]'
+                                : 'text-[#244B6B] dark:text-[#8CC2F0] hover:bg-[#EDF3F8] dark:hover:bg-[#1B2834]'
+                            }`}
+                          >
+                            <AudioStatusIcon
+                              state={exUkState}
+                              idleClassName="w-2.5 h-2.5 shrink-0"
+                              activeClassName="w-2.5 h-2.5"
+                            />
+                            <span>UK</span>
+                          </button>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
 

@@ -1,6 +1,7 @@
 import type { EnglishAccent } from '../types/flashcard';
 
 export type TtsCadenceSpeed = 'normal' | 'slow';
+export type TtsPedagogicalRole = 'term' | 'sentence';
 
 export interface VoiceLikeDescriptor {
   name: string;
@@ -854,10 +855,23 @@ export interface GeminiTtsDirective {
   accent: EnglishAccent;
   languageCode: 'en-US' | 'en-GB';
   voiceName: 'Kore' | 'Charon';
+  role: TtsPedagogicalRole;
   normalizedText: string;
   systemInstruction: string;
   speechStyle: string;
   matchedIpaHints: Array<{ word: string; ipa: string; phenomenon: string }>;
+}
+
+function inferPedagogicalRole(rawText: string, explicitRole?: TtsPedagogicalRole): TtsPedagogicalRole {
+  if (explicitRole === 'term' || explicitRole === 'sentence') {
+    return explicitRole;
+  }
+  const trimmed = String(rawText || '').trim();
+  const wordCount = trimmed ? trimmed.split(/\s+/).length : 0;
+  if (wordCount >= 5 || /[.!?]$/.test(trimmed)) {
+    return 'sentence';
+  }
+  return 'term';
 }
 
 /**
@@ -868,9 +882,15 @@ export interface GeminiTtsDirective {
 export function buildGeminiTtsDirective(
   rawText: string,
   accent: EnglishAccent,
-  speed: TtsCadenceSpeed = 'normal'
+  speed: TtsCadenceSpeed = 'normal',
+  role?: TtsPedagogicalRole
 ): GeminiTtsDirective {
   const profile = LOCALE_SPEECH_PROFILES[accent];
+  const resolvedRole = inferPedagogicalRole(rawText, role);
+  const roleDirective =
+    resolvedRole === 'sentence'
+      ? 'Deliver this full example sentence with natural real-life conversational cadence, smooth connected speech, and authentic native clause intonation.'
+      : 'Articulate this key expression with studio-grade phonetic clarity, clean vowel formants, and crisp word boundaries so the learner captures every sound.';
   const paceDirective =
     speed === 'slow'
       ? 'Deliberate, slow didactic learner pace (~0.7x speed) with crystal-clear syllable articulation and gentle pauses.'
@@ -896,9 +916,10 @@ export function buildGeminiTtsDirective(
       accent: 'uk',
       languageCode: profile.bcp47,
       voiceName: profile.geminiVoiceName,
+      role: resolvedRole,
       normalizedText: analysis.normalizedText,
       systemInstruction: BRITISH_RP_SYSTEM_INSTRUCTION,
-      speechStyle: `Authentic native Southern Standard British English (Received Pronunciation, en-GB) male educator. Crisp alveolar T (no American flap), TRAP-BATH /ɑː/, rounded LOT /ɒ/, yod-retention /njuː, tjuː, djuː/.${linkingNote}${ipaNotes} ${paceDirective}`,
+      speechStyle: `Authentic native Southern Standard British English (Received Pronunciation, en-GB) male educator. Crisp alveolar T (no American flap), TRAP-BATH /ɑː/, rounded LOT /ɒ/, yod-retention /njuː, tjuː, djuː/.${linkingNote}${ipaNotes} ${roleDirective} ${paceDirective}`,
       matchedIpaHints: analysis.matchedIpaHints,
     };
   }
@@ -907,9 +928,10 @@ export function buildGeminiTtsDirective(
     accent: 'us',
     languageCode: profile.bcp47,
     voiceName: profile.geminiVoiceName,
+    role: resolvedRole,
     normalizedText: String(rawText || '').replace(/\s+/g, ' ').trim(),
     systemInstruction: GENERAL_AMERICAN_SYSTEM_INSTRUCTION,
-    speechStyle: `Authentic native General American English (en-US) educator, warm natural prosody. ${paceDirective}`,
+    speechStyle: `Authentic native General American English (en-US) educator, warm natural prosody. ${roleDirective} ${paceDirective}`,
     matchedIpaHints: [],
   };
 }

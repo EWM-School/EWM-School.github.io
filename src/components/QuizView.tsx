@@ -1,16 +1,16 @@
 import { memo, useEffect, useState } from 'react';
-import { ArrowRight, CheckCircle2, RotateCcw, Share2, Volume2, XCircle } from 'lucide-react';
-import type { EnglishAccent, Flashcard, QuizOption, QuizQuestion } from '../types/flashcard';
+import { ArrowRight, CheckCircle2, RotateCcw, Share2, XCircle } from 'lucide-react';
+import type { Flashcard, QuizOption, QuizQuestion } from '../types/flashcard';
 import { getCardPhonetics } from '../utils/phonetics';
 import {
-  cleanEnglishForSpeech,
+  getAudioButtonVisualState,
   stopCurrentAudio,
   subscribeAudioPlayback,
   toggleSpeakEnglishText,
   type ActiveAudioPlayback,
 } from '../services/platform/speechService';
 import { triggerTap } from '../services/platform/hapticsService';
-import { AudioWaveIcon } from './CardAudioControls';
+import { AudioStatusIcon } from './CardAudioControls';
 
 interface QuizViewProps {
   question: QuizQuestion | null;
@@ -61,10 +61,28 @@ export const QuizView = memo(function QuizView({
   const isCorrectChoice = Boolean(chosenOption?.isCorrect);
   const phonetics = getCardPhonetics(question.card);
 
-  const isPlaying = (rawText: string, accent: EnglishAccent) =>
-    Boolean(activeAudio) &&
-    activeAudio?.accent === accent &&
-    activeAudio?.text === cleanEnglishForSpeech(rawText);
+  const termUsState = getAudioButtonVisualState(activeAudio, {
+    text: question.card.term,
+    accent: 'us',
+    sourceId: 'quiz-term-us',
+  });
+  const termUkState = getAudioButtonVisualState(activeAudio, {
+    text: question.card.term,
+    accent: 'uk',
+    sourceId: 'quiz-term-uk',
+  });
+  const exUsState = getAudioButtonVisualState(activeAudio, {
+    text: question.card.exampleEn,
+    accent: 'us',
+    sourceId: 'quiz-ex-us',
+  });
+  const exUkState = getAudioButtonVisualState(activeAudio, {
+    text: question.card.exampleEn,
+    accent: 'uk',
+    sourceId: 'quiz-ex-uk',
+  });
+  const stateClass = (st: 'idle' | 'loading' | 'playing') =>
+    st === 'loading' ? 'ewm-audio-loading' : st === 'playing' ? 'ewm-audio-playing' : '';
 
   return (
     <div className="max-w-2xl mx-auto space-y-3.5 sm:space-y-5 animate-card-enter select-none">
@@ -128,45 +146,59 @@ export const QuizView = memo(function QuizView({
             <div className="inline-flex items-center gap-1.5">
               <button
                 type="button"
-                aria-pressed={isPlaying(question.card.term, 'us')}
-                onClick={() => {
+                aria-pressed={termUsState !== 'idle'}
+                aria-busy={termUsState === 'loading'}
+                onClick={(e) => {
+                  e.stopPropagation();
                   void triggerTap();
-                  void toggleSpeakEnglishText(question.card.term, 'us');
+                  void toggleSpeakEnglishText(question.card.term, 'us', {
+                    role: 'term',
+                    sourceId: 'quiz-term-us',
+                  });
                 }}
                 aria-label={`Ouvir ${question.card.term} em inglês americano`}
-                className={`min-h-[38px] sm:min-h-[42px] lg:min-h-[36px] inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-xl lg:rounded-lg border text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                  isPlaying(question.card.term, 'us')
+                className={`min-h-[38px] sm:min-h-[42px] lg:min-h-[36px] inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-xl lg:rounded-lg border text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${stateClass(
+                  termUsState
+                )} ${
+                  termUsState !== 'idle'
                     ? 'bg-[#28665E] border-[#28665E] text-white dark:bg-[#2A6D63] dark:border-[#3E8E82] dark:text-[#F4F7F6]'
                     : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[#225851] dark:text-[#86CEC2] border-[#C6DBD7] dark:border-[#2F4B46]'
                 }`}
               >
-                {isPlaying(question.card.term, 'us') ? (
-                  <AudioWaveIcon className="w-3.5 h-3" />
-                ) : (
-                  <Volume2 className="w-3.5 h-3.5" />
-                )}
-                <span>Ouvir US</span>
+                <AudioStatusIcon
+                  state={termUsState}
+                  idleClassName="w-3.5 h-3.5 shrink-0"
+                  activeClassName="w-3.5 h-3"
+                />
+                <span>{termUsState === 'loading' ? 'US...' : 'Ouvir US'}</span>
               </button>
               <button
                 type="button"
-                aria-pressed={isPlaying(question.card.term, 'uk')}
-                onClick={() => {
+                aria-pressed={termUkState !== 'idle'}
+                aria-busy={termUkState === 'loading'}
+                onClick={(e) => {
+                  e.stopPropagation();
                   void triggerTap();
-                  void toggleSpeakEnglishText(question.card.term, 'uk');
+                  void toggleSpeakEnglishText(question.card.term, 'uk', {
+                    role: 'term',
+                    sourceId: 'quiz-term-uk',
+                  });
                 }}
                 aria-label={`Ouvir ${question.card.term} em inglês britânico`}
-                className={`min-h-[38px] sm:min-h-[42px] lg:min-h-[36px] inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-xl lg:rounded-lg border text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                  isPlaying(question.card.term, 'uk')
+                className={`min-h-[38px] sm:min-h-[42px] lg:min-h-[36px] inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-xl lg:rounded-lg border text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${stateClass(
+                  termUkState
+                )} ${
+                  termUkState !== 'idle'
                     ? 'bg-[#243B53] border-[#243B53] text-white dark:bg-[#2E4C6B] dark:border-[#496F96] dark:text-[#F4F7F8]'
                     : 'bg-[#EDF1F5] hover:bg-[#DFE6EE] dark:bg-[#1E2630] dark:hover:bg-[#26313E] text-[#243B53] dark:text-[#9CC3E6] border-[#C9D5E2] dark:border-[#334354]'
                 }`}
               >
-                {isPlaying(question.card.term, 'uk') ? (
-                  <AudioWaveIcon className="w-3.5 h-3" />
-                ) : (
-                  <Volume2 className="w-3.5 h-3.5" />
-                )}
-                <span>Ouvir UK</span>
+                <AudioStatusIcon
+                  state={termUkState}
+                  idleClassName="w-3.5 h-3.5 shrink-0"
+                  activeClassName="w-3.5 h-3"
+                />
+                <span>{termUkState === 'loading' ? 'UK...' : 'Ouvir UK'}</span>
               </button>
             </div>
           </div>
@@ -190,36 +222,58 @@ export const QuizView = memo(function QuizView({
             <div className="inline-flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
-                aria-pressed={isPlaying(question.card.exampleEn, 'us')}
-                onClick={() => {
+                aria-pressed={exUsState !== 'idle'}
+                aria-busy={exUsState === 'loading'}
+                onClick={(e) => {
+                  e.stopPropagation();
                   void triggerTap();
-                  void toggleSpeakEnglishText(question.card.exampleEn, 'us');
+                  void toggleSpeakEnglishText(question.card.exampleEn, 'us', {
+                    role: 'sentence',
+                    sourceId: 'quiz-ex-us',
+                  });
                 }}
                 aria-label="Ouvir frase do exemplo em inglês americano"
-                className={`min-h-[34px] sm:min-h-[38px] lg:min-h-[30px] inline-flex items-center gap-1 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-lg text-[10.5px] sm:text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                  isPlaying(question.card.exampleEn, 'us')
+                className={`min-h-[34px] sm:min-h-[38px] lg:min-h-[30px] inline-flex items-center gap-1 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-lg text-[10.5px] sm:text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${stateClass(
+                  exUsState
+                )} ${
+                  exUsState !== 'idle'
                     ? 'bg-[#28665E] text-white dark:bg-[#2A6D63] dark:text-[#F4F7F6]'
                     : 'bg-[#EAF3F1] hover:bg-[#DCECE8] dark:bg-[#1E312E] dark:hover:bg-[#253D39] text-[#225851] dark:text-[#86CEC2]'
                 }`}
               >
-                <Volume2 className="w-3 h-3" />
+                <AudioStatusIcon
+                  state={exUsState}
+                  idleClassName="w-3 h-3 shrink-0"
+                  activeClassName="w-3 h-2.5"
+                />
                 <span>US</span>
               </button>
               <button
                 type="button"
-                aria-pressed={isPlaying(question.card.exampleEn, 'uk')}
-                onClick={() => {
+                aria-pressed={exUkState !== 'idle'}
+                aria-busy={exUkState === 'loading'}
+                onClick={(e) => {
+                  e.stopPropagation();
                   void triggerTap();
-                  void toggleSpeakEnglishText(question.card.exampleEn, 'uk');
+                  void toggleSpeakEnglishText(question.card.exampleEn, 'uk', {
+                    role: 'sentence',
+                    sourceId: 'quiz-ex-uk',
+                  });
                 }}
                 aria-label="Ouvir frase do exemplo em inglês britânico"
-                className={`min-h-[34px] sm:min-h-[38px] lg:min-h-[30px] inline-flex items-center gap-1 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-lg text-[10.5px] sm:text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                  isPlaying(question.card.exampleEn, 'uk')
+                className={`min-h-[34px] sm:min-h-[38px] lg:min-h-[30px] inline-flex items-center gap-1 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-lg text-[10.5px] sm:text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${stateClass(
+                  exUkState
+                )} ${
+                  exUkState !== 'idle'
                     ? 'bg-[#243B53] text-white dark:bg-[#2E4C6B] dark:text-[#F4F7F8]'
                     : 'bg-[#EDF1F5] hover:bg-[#DFE6EE] dark:bg-[#1E2630] dark:hover:bg-[#26313E] text-[#243B53] dark:text-[#9CC3E6]'
                 }`}
               >
-                <Volume2 className="w-3 h-3" />
+                <AudioStatusIcon
+                  state={exUkState}
+                  idleClassName="w-3 h-3 shrink-0"
+                  activeClassName="w-3 h-2.5"
+                />
                 <span>UK</span>
               </button>
             </div>

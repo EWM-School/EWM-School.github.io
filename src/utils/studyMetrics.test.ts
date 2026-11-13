@@ -79,13 +79,61 @@ test('studyMetrics: formatStudyHoursMinutes formats hours and minutes properly',
   assert.equal(formatStudyHoursMinutes(620), '10h 20m');
 });
 
-test('studyMetrics: computeLeaderboard ranks top 3 students and includes current user', () => {
+test('studyMetrics: computeLeaderboard enforces Zero-Mocks solo state and ranks real Top 3 students', () => {
   const stats = getDefaultStudyStats();
   stats.todayReviewedCardIds = ['c1', 'c2', 'c3', 'c4', 'c5'];
   stats.monthlyActiveDays = ['2026-11-01', '2026-11-02', '2026-11-11'];
   stats.monthlyStudyMinutes = 120;
 
-  const result = computeLeaderboard('Igor Souza', stats);
+  // 1. Solo state (Zero Mocks): only the real student appears, zero fake bots
+  const soloResult = computeLeaderboard('Igor Souza', stats);
+  assert.equal(soloResult.topThree.length, 1);
+  assert.equal(soloResult.topThree[0].name, 'Igor Souza');
+  assert.equal(soloResult.topThree[0].rank, 1);
+  assert.equal(soloResult.topThree[0].badgeEmoji, '🥇');
+
+  // 2. Real multi-student monthly ranking with real cloud peers
+  const monthKey = stats.currentMonthKey;
+  const result = computeLeaderboard('Igor Souza', stats, {
+    currentUid: 'uid-igor',
+    cloudEntries: [
+      {
+        uid: 'uid-ana',
+        name: 'Ana Clara',
+        shortName: 'Ana C.',
+        initials: 'AC',
+        monthKey,
+        cardsReviewed: 40,
+        masteredCount: 25,
+        reviewCount: 10,
+        quizScore: 15,
+        activeDays: 10,
+        studyTimeMinutes: 300,
+        minutosEstudados: 45,
+        score: 2400,
+        statusText: 'Dominando Phrasal Verbs',
+        updatedAtMs: Date.now(),
+      },
+      {
+        uid: 'uid-lucas',
+        name: 'Lucas Mendes',
+        shortName: 'Lucas M.',
+        initials: 'LM',
+        monthKey,
+        cardsReviewed: 20,
+        masteredCount: 12,
+        reviewCount: 5,
+        quizScore: 8,
+        activeDays: 5,
+        studyTimeMinutes: 150,
+        minutosEstudados: 20,
+        score: 1250,
+        statusText: 'Treinando Speaking Lab',
+        updatedAtMs: Date.now(),
+      },
+    ],
+  });
+
   assert.equal(result.topThree.length, 3);
   assert.equal(result.topThree[0].rank, 1);
   assert.equal(result.topThree[0].badgeEmoji, '🥇');

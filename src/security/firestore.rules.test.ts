@@ -4,7 +4,9 @@ import path from 'node:path';
 import test from 'node:test';
 
 const ROOT_DIR = process.cwd();
-const rulesText = fs.readFileSync(path.join(ROOT_DIR, 'firestore.rules'), 'utf8');
+const rulesText = fs
+  .readFileSync(path.join(ROOT_DIR, 'firestore.rules'), 'utf8')
+  .replace(/\r\n/g, '\n');
 const blueprint = JSON.parse(
   fs.readFileSync(path.join(ROOT_DIR, 'firebase-blueprint.json'), 'utf8')
 );
