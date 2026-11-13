@@ -4,6 +4,7 @@
   "version": "1.2.1",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/auto-sync-pull.mjs",
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
     "build": "vite build",

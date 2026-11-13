@@ -20,18 +20,35 @@
 
 ---
 
-## 2. Como Continuar em Outro Computador (Quick Start — Casa / Notebook)
+## 2. Ponte Automática Casa ⇄ Trabalho & Quick Start (`feat/ewm-v2`)
 
-No novo computador (com **Git** e **Node.js 22+** instalados), execute no terminal:
+A arquitetura de branches separa estritamente **desenvolvimento contínuo diário** de **produção pública**:
+- **`feat/ewm-v2` (Branch Ativa de Desenvolvimento Casa ⇄ Trabalho):** Todas as entregas diárias, evoluções da v2 (Camadas 1, 2, 3+) e testes são sincronizados automaticamente aqui sem disparar deploy acidental em produção.
+- **`main` (Branch Protegida de Produção):** Recebe apenas merges validados para publicação imediata no GitHub Pages + geração de APK/AAB via GitHub Actions.
+
+### Setup Inicial em um Novo Computador
+No novo computador (com **Git**, **Node.js LTS** e **GitHub CLI `gh`** autenticados), execute:
 
 ```bash
-git clone https://github.com/EWM-School/EWM-School.github.io.git
+gh auth status || gh auth login --web -p https
+gh auth setup-git
+git clone -b feat/ewm-v2 https://github.com/EWM-School/EWM-School.github.io.git
 cd EWM-School.github.io
 npm install --legacy-peer-deps
 ```
+*(Copie apenas o seu arquivo local `.env` contendo `GEMINI_API_KEY` para a raiz do projeto — o `.env` permanece 100% ignorado pelo `.gitignore` e nunca sobe para o GitHub).*
+
+### Sincronização Diária Automática (Zero Atrito)
+1. **Auto-Pull Inteligente ao Iniciar (`npm run dev`):**
+   O hook `predev` executa automaticamente `node scripts/auto-sync-pull.mjs` antes de subir o servidor (`tsx server.ts`):
+   - Checa conectividade com o GitHub (timeout rápido de 3.5s);
+   - Protege qualquer alteração local não salva com `--autostash` e executa `git pull --rebase --autostash origin feat/ewm-v2`;
+   - Se estiver sem internet (modo offline), exibe apenas um aviso discreto no terminal e inicia o servidor local normalmente sem travar.
+2. **Auto-Push Obrigatório Pós-Entrega (Regra Permanente do Agente):**
+   Ao concluir e validar qualquer tarefa ou camada (`npm run lint` + `npm run build` limpos), o agente **DEVE obrigatoriamente** criar um commit semântico e executar `git push origin feat/ewm-v2` (mantendo `.env` sempre fora do Git), deixando tudo imediatamente disponível para o outro computador.
 
 ### Comandos Principais do Projeto
-- **Rodar servidor local de desenvolvimento:**
+- **Rodar servidor local de desenvolvimento (com Auto-Pull integrado):**
   ```bash
   npm run dev
   ```
@@ -47,13 +64,13 @@ npm install --legacy-peer-deps
   ```bash
   npm run cap:sync
   ```
-- **Publicar nova versão Web + APK + AAB automaticamente (CI/CD):**
+- **Promover `feat/ewm-v2` para Produção (`main` → Web + APK + AAB via CI/CD) SOMENTE quando autorizado:**
   ```bash
-  git add -A
-  git commit -m "feat: descrição da melhoria"
-  git push origin main
+  git checkout main && git pull --rebase origin main
+  git merge feat/ewm-v2 && git push origin main
+  git checkout feat/ewm-v2
   ```
-  *(Ao fazer `push` na `main`, o GitHub Actions incrementa automaticamente a versão semântica e publica tanto no GitHub Pages quanto no GitHub Releases. Caso volte a editar localmente depois do `push`, rode `git pull --rebase origin main` para puxar o commit automático de versão gerado pelo CI).*
+  *(Ao fazer `push` na `main`, o GitHub Actions incrementa automaticamente a versão semântica e publica tanto no GitHub Pages quanto no GitHub Releases).*
 
 ---
 
@@ -124,8 +141,15 @@ Todos os textos, metadados, classificação indicativa, questionário *Data Safe
 
 ## 7. Diretrizes Persistentes para o Agente IA (Antigravity)
 
-As regras permanentes de atuação proativa estão versionadas em:
+As regras permanentes de atuação proativa e sincronização automática Casa ⇄ Trabalho estão versionadas em:
 - `AGENTS.md`
 - `.agent/rules/proactive-automation.md`
+- `.agents/rules/proactive-automation.md`
+
+**Regra Permanente de Auto-Push Pós-Entrega (`feat/ewm-v2`):**
+Ao concluir e validar qualquer tarefa, correção ou camada neste projeto (`npm run lint` + `npm run build` 100% limpos), o agente **DEVE automaticamente**:
+1. Verificar que `.env` e artefatos sensíveis permanecem fora do stage (`git status`);
+2. Criar um commit semântico descritivo (`feat(...)`, `fix(...)`, `chore(...)`);
+3. Executar `git push origin feat/ewm-v2` (mantendo `main` protegida para produção até ordem explícita de release), garantindo que o computador de Casa e o computador do Trabalho recebam tudo pronto automaticamente via `npm run dev` (`scripts/auto-sync-pull.mjs`).
 
 Ao abrir este repositório em qualquer computador no Antigravity, o agente já tem autorização de automação contínua e sempre encerrará cada entrega com a seção **"🚀 Próximas Automações Sugeridas (Deseja que eu execute?)"**.
